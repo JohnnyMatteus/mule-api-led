@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes dos flows da FinERP System API com o ERP simulado (mock do requester). -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="finerp-sapi-flows-test-suite.xml"/>
+
+    <munit:test name="create-receivable-returns-201" description="COD_RETORNO 000 devolve 201 com o título canônico">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="ERP cria o título">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/finerp-to-receivable/input-created.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /receivables">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001-erp' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\receivables:application\json:finerp-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/finerp-to-receivable/expected-created.json', 'application/json'))]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-receivable-duplicate-is-idempotent-success" description="E023 (já cadastrado) devolve 201 com o documento existente">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="ERP responde duplicado">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/finerp-to-receivable/input-duplicate-settled.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /receivables">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0002-erp' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\receivables:application\json:finerp-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload.id]" is="#[MunitTools::equalTo('rcv-000123')]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-receivable-business-rejection-returns-422" description="HTTP 200 com COD_RETORNO de erro vira 422, sem retry">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="ERP rejeita">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/finerp-to-receivable/input-rejected.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /receivables">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0003-erp' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\receivables:application\json:finerp-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('REJECTED_BY_ERP')]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-receivable-auth-failure-returns-502" description="401 do ERP é falha nossa de configuração: 502 propagado, sem retry">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="ERP recusa credencial">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ MSG: 'NAO AUTORIZADO' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 401 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /receivables">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0004-erp' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="post:\receivables:application\json:finerp-sapi-config" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="FINERP:AUTH_FAILED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('AUTH_FAILED')]"/>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(502)]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-receivable-erp-down-retries-then-503" description="ERP fora do ar é repetido e termina em 503">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="ERP fora do ar">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="HTTP:CONNECTIVITY"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /receivables">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0005-erp' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="post:\receivables:application\json:finerp-sapi-config" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="MULE:RETRY_EXHAUSTED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <!-- 1 tentativa original + 3 retries (retry.maxRetries em config/common.yaml). -->
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(503)]"/>
+            <munit-tools:verify-call processor="http:request" times="4">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="FinERP Exemplo"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+</mule>

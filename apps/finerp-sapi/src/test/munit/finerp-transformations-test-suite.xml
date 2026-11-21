@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes das transformações DataWeave da FinERP System API, com payloads fictícios. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <munit:config name="finerp-transformations-test-suite.xml"/>
+
+    <munit:test name="receivable-to-finerp-builds-legacy-layout" description="Monta o layout legado: maiúsculas sem acento, centavos com 15 posições, datas yyyyMMdd e histórico truncado">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/receivable-to-finerp/input.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/receivable-to-finerp.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/receivable-to-finerp/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/receivable-to-finerp/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="finerp-to-receivable-maps-created" description="Retorno 000 vira título OPEN com a referência de negócio">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/finerp-to-receivable/input-created.json', 'application/json')]" mediaType="application/json"/>
+                <munit:variables>
+                    <munit:variable key="reference" value="#['rsv-9f2a']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/finerp-to-receivable.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/finerp-to-receivable/expected-created.json', 'application/json'))]" message="Saída difere do esperado em fixtures/finerp-to-receivable/expected-created.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="finerp-to-receivable-maps-duplicate-settled" description="Duplicado já liquidado (E023, ST_TITULO=L) vira SETTLED com o documento existente">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/finerp-to-receivable/input-duplicate-settled.json', 'application/json')]" mediaType="application/json"/>
+                <munit:variables>
+                    <munit:variable key="reference" value="#['rsv-9f2a']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/finerp-to-receivable.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.status]" is="#[MunitTools::equalTo('SETTLED')]"/>
+            <munit-tools:assert-that expression="#[payload.erpDocumentNumber]" is="#[MunitTools::equalTo('000123')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="erp-format-amount-avoids-float-rounding" description="129,90 vira 000000000012990 e 0,01 vira 000000000000001">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import toErpText, toErpDate, toErpAmount from modules::FinErpFormat
+output application/json
+---
+{ a: toErpAmount(129.9), b: toErpAmount(0.01) }]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.a]" is="#[MunitTools::equalTo('000000000012990')]"/>
+            <munit-tools:assert-that expression="#[payload.b]" is="#[MunitTools::equalTo('000000000000001')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="erp-format-text-respects-max-length" description="Texto curto não é preenchido; texto longo é cortado no limite">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import toErpText, toErpDate, toErpAmount from modules::FinErpFormat
+output application/json
+---
+{ short: toErpText(' ação ', 40), long: toErpText('abcdefghij', 4) }]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.short]" is="#[MunitTools::equalTo('ACAO')]"/>
+            <munit-tools:assert-that expression="#[payload.long]" is="#[MunitTools::equalTo('ABCD')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="erp-format-date-rejects-invalid-date" description="Data fora do formato ISO falha em vez de gravar lixo no ERP" expectedErrorType="MULE:EXPRESSION">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import toErpText, toErpDate, toErpAmount from modules::FinErpFormat
+output application/json
+---
+toErpDate('21/11/2026')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+    </munit:test>
+
+    <munit:test name="api-errors-hides-auth-failure-details" description="Credencial recusada vira 502 sem expor detalhes">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('FINERP:AUTH_FAILED', 'Credencial da integração recusada pelo FinERP', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/auth-failed-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/auth-failed-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-rejected-to-422" description="Rejeição de negócio do ERP vira 422 com details">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('FINERP:REJECTED', 'FinERP rejeitou o título por regra de negócio', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/rejected-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/rejected-expected.json"/>
+        </munit:validation>
+    </munit:test>
+</mule>
