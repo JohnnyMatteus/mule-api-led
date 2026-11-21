@@ -1,0 +1,12 @@
+# Valores iguais em todos os ambientes.
+# Retry curto: as System APIs já repetem falhas dos backends. Aqui só se repete
+# quando a própria System API não respondeu (conexão ou timeout).
+http:
+  listener:
+    host: "0.0.0.0"
+retry:
+  maxRetries: "2"
+  intervalMs: "300"
+sapi:
+  basePath: "/api"
+  timeoutMs: "15000"

@@ -73,7 +73,7 @@ components:
       schema:
         type: string
         minLength: 8
-        maxLength: 64
+        maxLength: 48
     StudentId:
       name: X-Student-Id
       in: header

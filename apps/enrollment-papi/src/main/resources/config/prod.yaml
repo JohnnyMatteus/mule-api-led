@@ -1,0 +1,17 @@
+http:
+  listener:
+    port: "8081"
+api:
+  id: "20000201"
+sapi:
+  protocol: "HTTPS"
+  clientId: "enrollment-papi-prod"
+  studio:
+    host: "studio-sapi.internal.example.com"
+    port: "443"
+  payments:
+    host: "payments-sapi.internal.example.com"
+    port: "443"
+  finerp:
+    host: "finerp-sapi.internal.example.com"
+    port: "443"

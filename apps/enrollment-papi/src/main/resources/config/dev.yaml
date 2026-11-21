@@ -1,0 +1,18 @@
+# Dev: chamadas internas pelo DNS privado do CloudHub 2.
+http:
+  listener:
+    port: "8081"
+api:
+  id: "10000201"
+sapi:
+  protocol: "HTTPS"
+  clientId: "enrollment-papi-dev"
+  studio:
+    host: "studio-sapi.internal.dev.example.com"
+    port: "443"
+  payments:
+    host: "payments-sapi.internal.dev.example.com"
+    port: "443"
+  finerp:
+    host: "finerp-sapi.internal.dev.example.com"
+    port: "443"

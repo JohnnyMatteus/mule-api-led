@@ -1,0 +1,4 @@
+# Placeholder: o pipeline de deploy grava aqui o valor cifrado com a chave do ambiente prod.
+# A chave (secure.key) chega como propriedade protegida no Runtime Manager, nunca no Git.
+sapi:
+  clientSecret: "![CIFRAR_NO_PIPELINE]"

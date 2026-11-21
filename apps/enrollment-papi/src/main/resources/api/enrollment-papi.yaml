@@ -68,11 +68,11 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Chave da matrícula; derivada em chaves por etapa para as System APIs.
+      description: "Chave da matrícula. Derivada por etapa (chave:reserve, chave:charge...) para as System APIs, por isso o limite de 48."
       schema:
         type: string
         minLength: 8
-        maxLength: 64
+        maxLength: 48
   responses:
     BadRequest:
       description: Requisição inválida
@@ -87,13 +87,13 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Conflict:
-      description: Aula sem vagas
+      description: Aula sem vagas ou reserva expirada antes da confirmação
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     Unprocessable:
-      description: Regra de negócio impede a matrícula (aluno inativo, pagamento recusado)
+      description: Regra de negócio impede a matrícula (aluno inativo, aula iniciada, pagamento recusado)
       content:
         application/json:
           schema:

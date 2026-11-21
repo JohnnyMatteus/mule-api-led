@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Chamadas às System APIs. Entrada: vars.sapiRequest = { method, path, idempotencyKey? } e o payload.
+    Saída: payload e attributes.statusCode da System API.
+
+    Política de retry desta camada: o validador aceita 200..599, então until-successful só repete
+    quando a System API não respondeu (conexão recusada ou timeout). Um 503 da System API significa
+    que ela já esgotou o próprio retry contra o backend; repetir aqui multiplicaria as tentativas
+    (4 x 3 = 12 chamadas ao backend). 5xx vira <SISTEMA>:UNAVAILABLE; 4xx é interpretado por quem chamou.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <sub-flow name="call-studio-sapi">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry se a System API não responder">
+            <http:request config-ref="studio-sapi-request-config" method="#[vars.sapiRequest.method]" path="#[vars.sapiRequest.path]" responseTimeout="${sapi.timeoutMs}" doc:name="Studio System API">
+                <http:headers>#[if (vars.sapiRequest.idempotencyKey != null) { 'Idempotency-Key': vars.sapiRequest.idempotencyKey } else {}]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..599"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="5xx da System API">
+            <when expression="#[attributes.statusCode >= 500]">
+                <raise-error type="STUDIO:UNAVAILABLE" description="Studio System API indisponível"/>
+            </when>
+        </choice>
+    </sub-flow>
+
+    <sub-flow name="call-payments-sapi">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry se a System API não responder">
+            <http:request config-ref="payments-sapi-request-config" method="#[vars.sapiRequest.method]" path="#[vars.sapiRequest.path]" responseTimeout="${sapi.timeoutMs}" doc:name="Payments System API">
+                <http:headers>#[if (vars.sapiRequest.idempotencyKey != null) { 'Idempotency-Key': vars.sapiRequest.idempotencyKey } else {}]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..599"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="5xx da System API">
+            <when expression="#[attributes.statusCode >= 500]">
+                <raise-error type="PAYMENTS:UNAVAILABLE" description="Payments System API indisponível; resultado da cobrança desconhecido"/>
+            </when>
+        </choice>
+    </sub-flow>
+
+    <sub-flow name="call-finerp-sapi">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry se a System API não responder">
+            <http:request config-ref="finerp-sapi-request-config" method="#[vars.sapiRequest.method]" path="#[vars.sapiRequest.path]" responseTimeout="${sapi.timeoutMs}" doc:name="FinERP System API">
+                <http:headers>#[if (vars.sapiRequest.idempotencyKey != null) { 'Idempotency-Key': vars.sapiRequest.idempotencyKey } else {}]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..599"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="5xx da System API">
+            <when expression="#[attributes.statusCode >= 500]">
+                <raise-error type="FINERP:UNAVAILABLE" description="FinERP System API indisponível"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>
