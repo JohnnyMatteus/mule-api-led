@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interface da System API: roteamento pelo contrato OAS e um flow por operação. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <flow name="payments-sapi-main">
+        <!-- O listener adota o X-Correlation-ID recebido como correlationId do evento (ou gera um). -->
+        <http:listener config-ref="payments-sapi-listener-config" path="/api/*" doc:name="HTTP /api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="payments-sapi-config" doc:name="Roteia e valida pelo contrato"/>
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <flow name="post:\charges:application\json:payments-sapi-config">
+        <set-variable variableName="idempotencyKey" value="#[attributes.headers['idempotency-key']]" doc:name="Idempotency-Key"/>
+        <ee:transform doc:name="Cobrança canônica para o formato do processador">
+            <ee:message>
+                <ee:set-payload resource="dw/charge-request-to-processor.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <flow-ref name="call-processor" doc:name="Chama o processador com retry"/>
+        <ee:transform doc:name="Resposta do processador para cobrança canônica">
+            <ee:message>
+                <ee:set-payload resource="dw/processor-to-charge.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="httpStatus" value="#[201]" doc:name="201 Created"/>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "payments.charge.processed", chargeId: payload.id, reference: payload.reference, status: payload.status }]' doc:name="Log cobrança processada"/>
+    </flow>
+</mule>

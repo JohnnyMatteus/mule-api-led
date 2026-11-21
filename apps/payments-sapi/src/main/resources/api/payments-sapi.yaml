@@ -42,6 +42,8 @@ paths:
                 $ref: "#/components/schemas/Charge"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 components:
@@ -67,6 +69,12 @@ components:
   responses:
     BadRequest:
       description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: O processador rejeitou os dados da cobrança
       content:
         application/json:
           schema:
@@ -133,7 +141,7 @@ components:
       properties:
         id:
           type: string
-          example: chg-7c1d
+          example: pay-7c1d
         reference:
           type: string
         status:

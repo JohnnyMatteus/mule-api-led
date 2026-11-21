@@ -1,0 +1,11 @@
+# Local: processador simulado pelo WireMock do docker-compose.
+http:
+  listener:
+    port: "8085"
+api:
+  id: "0"
+processor:
+  protocol: "HTTP"
+  host: "localhost"
+  port: "9090"
+  basePath: "/processor"
