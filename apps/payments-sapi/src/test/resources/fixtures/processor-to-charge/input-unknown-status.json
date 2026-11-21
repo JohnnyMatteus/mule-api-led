@@ -1,0 +1,7 @@
+{
+  "payment_id": "pay-0a0a",
+  "status": "chargeback",
+  "amount_minor": 15000,
+  "currency": "BRL",
+  "merchant_reference": "rsv-9f2a"
+}

@@ -1,0 +1,8 @@
+{
+  "amount_minor": 15000,
+  "currency": "BRL",
+  "merchant_reference": "rsv-9f2a",
+  "customer": { "external_id": "stu-001", "name": "Ana Exemplo", "email": "ana@example.com" },
+  "payment_method": { "kind": "card_token", "card_token": "tok-test-0001" },
+  "statement_descriptor": "MATRÍCULA VINYASA INIC"
+}

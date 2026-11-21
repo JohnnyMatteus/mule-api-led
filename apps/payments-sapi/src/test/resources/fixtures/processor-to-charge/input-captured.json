@@ -1,0 +1,7 @@
+{
+  "payment_id": "pay-7c1d",
+  "status": "captured",
+  "amount_minor": 15000,
+  "currency": "BRL",
+  "merchant_reference": "rsv-9f2a"
+}

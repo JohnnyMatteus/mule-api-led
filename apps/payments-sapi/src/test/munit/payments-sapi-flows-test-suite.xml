@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes dos flows da Payments System API com o processador simulado (mock do requester). -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="payments-sapi-flows-test-suite.xml"/>
+
+    <munit:test name="create-charge-approved-returns-201" description="Cobrança capturada volta 201 com status APPROVED">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Processador aprova">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-captured.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /charges">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001-charge' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\charges:application\json:payments-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/processor-to-charge/expected-approved.json', 'application/json'))]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-charge-declined-is-not-an-error" description="402 do processador vira 201 com status DECLINED, sem retry">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Processador recusa">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-declined.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 402 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /charges">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0002-charge' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\charges:application\json:payments-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload.status]" is="#[MunitTools::equalTo('DECLINED')]"/>
+            <munit-tools:assert-that expression="#[payload.declineReason]" is="#[MunitTools::equalTo('INSUFFICIENT_FUNDS')]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-charge-invalid-data-returns-422" description="422 do processador vira 422 REJECTED_BY_PROCESSOR, sem retry">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Processador rejeita">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ error: 'invalid card_token' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 422 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /charges">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0003-charge' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\charges:application\json:payments-sapi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('REJECTED_BY_PROCESSOR')]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-charge-timeout-retries-then-returns-503" description="Timeout é repetido com a mesma Idempotency-Key e termina em 503">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Processador não responde">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="HTTP:TIMEOUT"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /charges">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0004-charge' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="post:\charges:application\json:payments-sapi-config" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="MULE:RETRY_EXHAUSTED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <!-- 1 tentativa original + 3 retries (retry.maxRetries em config/common.yaml). -->
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('RETRY_EXHAUSTED')]"/>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(503)]"/>
+            <munit-tools:verify-call processor="http:request" times="4">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Processador de pagamentos"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+</mule>

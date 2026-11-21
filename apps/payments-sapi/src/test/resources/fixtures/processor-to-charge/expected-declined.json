@@ -1,0 +1,7 @@
+{
+  "id": "pay-8d2e",
+  "reference": "rsv-9f2a",
+  "status": "DECLINED",
+  "declineReason": "INSUFFICIENT_FUNDS",
+  "amount": { "value": 150, "currency": "BRL" }
+}
