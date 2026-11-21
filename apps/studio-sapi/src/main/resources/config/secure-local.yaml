@@ -1,0 +1,4 @@
+# Cifrado com a chave pública de desenvolvimento (veja docs/design-doc.md, seção Segurança).
+# Valor em claro: dev-only-studio-api-key. Nunca use esta chave fora da máquina local.
+studio:
+  apiKey: "![exgtAhqJfW9AYxOV2DpTy/5I/GJPlpBB1x1uHjmzL2M=]"

@@ -1,0 +1,11 @@
+# Dev: CloudHub 2 expõe a aplicação na porta 8081 atrás do ingress com TLS.
+http:
+  listener:
+    port: "8081"
+api:
+  id: "10000101"
+studio:
+  protocol: "HTTPS"
+  host: "studio-saas.dev.example.com"
+  port: "443"
+  basePath: "/"
