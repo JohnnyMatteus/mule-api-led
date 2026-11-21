@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: Enrollment Process API
+  version: 1.0.0
+  description: |
+    Process API que orquestra a matrícula paga: valida aluno e aula, reserva a vaga,
+    cobra, confirma a matrícula e registra o título no ERP. É o único lugar com a regra
+    de negócio da matrícula; não conhece nenhum canal (app, site, balcão).
+  contact:
+    name: Time de Integração (fictício)
+    email: integracao@example.com
+  x-api-layer: process
+  x-owner-team: integracao-matriculas
+servers:
+  - url: http://localhost:8082/api
+    description: Local
+tags:
+  - name: enrollments
+    description: Matrículas pagas
+paths:
+  /enrollments:
+    post:
+      tags: [enrollments]
+      operationId: createEnrollment
+      summary: Matricula um aluno numa aula paga
+      description: |
+        Fluxo: reserva a vaga, cobra e confirma. Se a cobrança for recusada, a reserva é
+        liberada (compensação). Se o ERP falhar, a matrícula é confirmada mesmo assim e
+        volta com erpSync.status = PENDING para reprocessamento.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentRequest"
+      responses:
+        "201":
+          description: Matrícula confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Identificador de correlação propagado entre as camadas.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave da matrícula; derivada em chaves por etapa para as System APIs.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Aluno ou aula não encontrados
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Aula sem vagas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: Regra de negócio impede a matrícula (aluno inativo, pagamento recusado)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Um sistema essencial ficou indisponível após as tentativas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Money:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+        currency:
+          type: string
+          enum: [BRL]
+    EnrollmentRequest:
+      type: object
+      required: [studentId, classId, paymentMethod]
+      additionalProperties: false
+      properties:
+        studentId:
+          type: string
+          pattern: "^stu-[a-z0-9]+$"
+        classId:
+          type: string
+          pattern: "^cls-[a-z0-9]+$"
+        paymentMethod:
+          type: object
+          required: [type, token]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              description: Nesta versão só cartão tokenizado; PIX está nos próximos passos.
+              enum: [CARD_TOKEN]
+            token:
+              type: string
+              minLength: 8
+    Enrollment:
+      type: object
+      required: [id, status, studentId, classInfo, amount, charge, erpSync]
+      properties:
+        id:
+          type: string
+          description: Igual ao identificador da reserva confirmada no estúdio.
+          example: rsv-9f2a
+        status:
+          type: string
+          enum: [CONFIRMED]
+        studentId:
+          type: string
+        classInfo:
+          type: object
+          required: [id, title, startsAt]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            startsAt:
+              type: string
+              format: date-time
+        amount:
+          $ref: "#/components/schemas/Money"
+        charge:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+              enum: [APPROVED]
+        erpSync:
+          type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [SYNCED, PENDING]
+            receivableId:
+              type: string
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
