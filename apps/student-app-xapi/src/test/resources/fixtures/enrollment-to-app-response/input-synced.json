@@ -1,0 +1,13 @@
+{
+  "id": "rsv-9f2a",
+  "status": "CONFIRMED",
+  "studentId": "stu-001",
+  "classInfo": {
+    "id": "cls-101",
+    "title": "Vinyasa Iniciante",
+    "startsAt": "2026-12-01T07:00:00-03:00"
+  },
+  "amount": { "value": 150, "currency": "BRL" },
+  "charge": { "id": "pay-7c1d", "status": "APPROVED" },
+  "erpSync": { "status": "SYNCED", "receivableId": "rcv-000123" }
+}
