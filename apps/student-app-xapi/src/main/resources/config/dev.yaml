@@ -4,6 +4,7 @@ http:
 api:
   id: "10000301"
 papi:
+  basePath: "/api"
   protocol: "HTTPS"
   host: "enrollment-papi.internal.dev.example.com"
   port: "443"

@@ -5,6 +5,7 @@ http:
 api:
   id: "0"
 papi:
+  basePath: "/api"
   protocol: "HTTP"
   host: "localhost"
   port: "8082"

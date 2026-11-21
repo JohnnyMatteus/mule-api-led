@@ -4,6 +4,7 @@ http:
 api:
   id: "20000201"
 sapi:
+  basePath: "/api"
   protocol: "HTTPS"
   clientId: "enrollment-papi-prod"
   studio:

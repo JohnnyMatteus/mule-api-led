@@ -8,5 +8,4 @@ retry:
   maxRetries: "2"
   intervalMs: "300"
 sapi:
-  basePath: "/api"
   timeoutMs: "15000"

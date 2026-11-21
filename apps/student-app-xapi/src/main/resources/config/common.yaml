@@ -7,5 +7,4 @@ retry:
   maxRetries: "1"
   intervalMs: "300"
 papi:
-  basePath: "/api"
   timeoutMs: "30000"
