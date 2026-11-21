@@ -1,0 +1,55 @@
+{
+  "mappings": [
+    {
+      "name": "processador: cartão recusado",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/payments",
+        "headers": {
+          "Authorization": {
+            "matches": "Bearer .+"
+          },
+          "Idempotency-Key": {
+            "matches": ".+"
+          }
+        },
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$.payment_method[?(@.card_token == 'tok-test-declined')]"
+          }
+        ]
+      },
+      "response": {
+        "status": 402,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "processor/processor-to-charge/input-declined.json"
+      }
+    },
+    {
+      "name": "processador: cobrança capturada",
+      "priority": 5,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/payments",
+        "headers": {
+          "Authorization": {
+            "matches": "Bearer .+"
+          },
+          "Idempotency-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "processor/processor-to-charge/input-captured.json"
+      }
+    }
+  ]
+}
