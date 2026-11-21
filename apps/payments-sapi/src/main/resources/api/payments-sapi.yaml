@@ -1,0 +1,160 @@
+openapi: 3.0.3
+info:
+  title: Payments System API
+  version: 1.0.0
+  description: |
+    System API do processador de pagamentos fictício. Traduz cobranças do modelo canônico
+    para o formato do processador (valores em centavos, status próprios) e de volta.
+    Uma recusa do processador não é erro técnico: volta como cobrança com status DECLINED.
+  contact:
+    name: Time de Integração (fictício)
+    email: integracao@example.com
+  x-api-layer: system
+  x-owner-team: integracao-pagamentos
+servers:
+  - url: http://localhost:8085/api
+    description: Local
+tags:
+  - name: charges
+    description: Cobranças
+paths:
+  /charges:
+    post:
+      tags: [charges]
+      operationId: createCharge
+      summary: Cria uma cobrança no processador
+      description: A Idempotency-Key é repassada ao processador; repetir a chamada não cobra duas vezes.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChargeRequest"
+      responses:
+        "201":
+          description: Cobrança processada (aprovada, recusada ou pendente)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Charge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Identificador de correlação propagado entre as camadas.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave que torna a criação segura para retry.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Processador indisponível após as tentativas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Money:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: number
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 150.00
+        currency:
+          type: string
+          enum: [BRL]
+    ChargeRequest:
+      type: object
+      required: [reference, amount, customer, paymentMethod, description]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+          description: "Referência de negócio do chamador, por exemplo o id da reserva."
+          example: rsv-9f2a
+        amount:
+          $ref: "#/components/schemas/Money"
+        customer:
+          type: object
+          required: [id, name, email]
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+        paymentMethod:
+          type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              enum: [CARD_TOKEN, PIX]
+            token:
+              type: string
+              description: Token do cartão gerado pelo app; obrigatório para CARD_TOKEN.
+        description:
+          type: string
+          maxLength: 80
+    Charge:
+      type: object
+      required: [id, reference, status, amount]
+      properties:
+        id:
+          type: string
+          example: chg-7c1d
+        reference:
+          type: string
+        status:
+          type: string
+          enum: [APPROVED, DECLINED, PENDING]
+        declineReason:
+          type: string
+          enum: [INSUFFICIENT_FUNDS, CARD_EXPIRED, SUSPECTED_FRAUD, OTHER]
+        amount:
+          $ref: "#/components/schemas/Money"
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
