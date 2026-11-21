@@ -23,7 +23,7 @@ paths:
       tags: [receivables]
       operationId: createReceivable
       summary: Registra um título a receber no ERP
-      description: O ERP deduplica pelo número de referência; a Idempotency-Key é usada como referência externa.
+      description: O ERP deduplica pela referência de negócio; repetir com a mesma referência devolve o título já existente.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -44,6 +44,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "422":
           $ref: "#/components/responses/Unprocessable"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 components:
@@ -75,6 +77,12 @@ components:
             $ref: "#/components/schemas/Error"
     Unprocessable:
       description: O ERP rejeitou o título por regra própria
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: Falha de integração com o ERP (por exemplo, credencial recusada)
       content:
         application/json:
           schema:

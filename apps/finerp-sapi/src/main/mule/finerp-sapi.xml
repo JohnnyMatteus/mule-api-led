@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interface da System API: roteamento pelo contrato OAS e um flow por operação. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <flow name="finerp-sapi-main">
+        <!-- O listener adota o X-Correlation-ID recebido como correlationId do evento (ou gera um). -->
+        <http:listener config-ref="finerp-sapi-listener-config" path="/api/*" doc:name="HTTP /api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="finerp-sapi-config" doc:name="Roteia e valida pelo contrato"/>
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <flow name="post:\receivables:application\json:finerp-sapi-config">
+        <set-variable variableName="reference" value="#[payload.reference]" doc:name="Referência de negócio"/>
+        <ee:transform doc:name="Título canônico para o layout do FinERP">
+            <ee:message>
+                <ee:set-payload resource="dw/receivable-to-finerp.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <flow-ref name="call-finerp" doc:name="Chama o FinERP com retry"/>
+        <ee:transform doc:name="Retorno do FinERP para título canônico">
+            <ee:message>
+                <ee:set-payload resource="dw/finerp-to-receivable.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="httpStatus" value="#[201]" doc:name="201 Created"/>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "finerp.receivable.registered", receivableId: payload.id, reference: payload.reference }]' doc:name="Log título registrado"/>
+    </flow>
+</mule>

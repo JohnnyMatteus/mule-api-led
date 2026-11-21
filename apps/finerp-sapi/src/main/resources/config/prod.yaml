@@ -1,0 +1,11 @@
+http:
+  listener:
+    port: "8081"
+api:
+  id: "20000102"
+finerp:
+  protocol: "HTTPS"
+  host: "finerp.example.com"
+  port: "443"
+  basePath: "/"
+  username: "integracao-prod"

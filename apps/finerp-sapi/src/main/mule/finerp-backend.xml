@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Acesso ao FinERP Exemplo. O ERP legado responde HTTP 200 até para erros de negócio e
+    informa o resultado em COD_RETORNO. Por isso a classificação acontece depois do retry:
+    - 000: título criado.
+    - E023: título já cadastrado com a mesma referência. É o efeito desejado (idempotência),
+      então segue como sucesso com o número do documento existente.
+    - outros códigos: rejeição de negócio (FINERP:REJECTED, 422).
+    401/403 indicam credencial errada do nosso lado: FINERP:AUTH_FAILED (502, sem detalhes).
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <sub-flow name="call-finerp">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry em falha transitória">
+            <http:request config-ref="finerp-config" method="POST" path="/erp/v1/titulos" responseTimeout="${finerp.timeoutMs}" doc:name="FinERP Exemplo">
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..299,400..499"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="Classifica o retorno do ERP">
+            <when expression="#[[401, 403] contains attributes.statusCode]">
+                <raise-error type="FINERP:AUTH_FAILED" description="Credencial da integração recusada pelo FinERP"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="FINERP:REJECTED" description="FinERP rejeitou a requisição"/>
+            </when>
+            <when expression="#[payload.COD_RETORNO == 'E023']">
+                <logger level="INFO" message='#[output application/json indent=false --- { event: "finerp.receivable.duplicate", reference: vars.reference, erpDocumentNumber: payload.NR_DOCUMENTO }]' doc:name="Duplicado é sucesso idempotente"/>
+            </when>
+            <when expression="#[payload.COD_RETORNO != '000']">
+                <raise-error type="FINERP:REJECTED" description="FinERP rejeitou o título por regra de negócio"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>
