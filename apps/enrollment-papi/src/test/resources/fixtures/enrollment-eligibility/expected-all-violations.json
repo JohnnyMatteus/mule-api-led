@@ -1,0 +1,4 @@
+{
+  "eligible": false,
+  "violations": ["STUDENT_INACTIVE", "CLASS_ALREADY_STARTED", "CLASS_FULL"]
+}

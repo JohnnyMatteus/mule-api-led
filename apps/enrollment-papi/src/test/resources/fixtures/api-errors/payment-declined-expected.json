@@ -1,0 +1,9 @@
+{
+  "status": 422,
+  "body": {
+    "code": "PAYMENT_DECLINED",
+    "message": "Pagamento não aprovado",
+    "correlationId": "corr-test-0001",
+    "details": ["Pagamento não aprovado"]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "studentId": "stu-001",
+  "classId": "cls-101",
+  "paymentMethod": { "type": "CARD_TOKEN", "token": "tok-test-0001" }
+}
