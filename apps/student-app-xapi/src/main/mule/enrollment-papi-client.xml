@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Chamada à Process API. O validador aceita 200..599: until-successful só repete quando a
+    Process API não respondeu (conexão ou timeout), e a mesma Idempotency-Key vai em toda
+    tentativa. 5xx vira PROCESS:UNAVAILABLE; 4xx volta para o flow traduzir para o app.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <sub-flow name="call-enrollment-papi">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry se a Process API não responder">
+            <http:request config-ref="enrollment-papi-request-config" method="POST" path="/enrollments" responseTimeout="${papi.timeoutMs}" doc:name="Enrollment Process API">
+                <http:headers>#[{ 'Idempotency-Key': vars.idempotencyKey }]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..599"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="5xx da Process API">
+            <when expression="#[attributes.statusCode >= 500]">
+                <raise-error type="PROCESS:UNAVAILABLE" description="Enrollment Process API indisponível"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>

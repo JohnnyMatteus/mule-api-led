@@ -1,0 +1,11 @@
+# Mocks: Process API simulada pelo Prism do docker-compose (make up), sem runtime das camadas abaixo.
+http:
+  listener:
+    port: "8081"
+api:
+  id: "0"
+papi:
+  protocol: "HTTP"
+  host: "localhost"
+  port: "4020"
+  clientId: "student-app-xapi-local"

@@ -1,0 +1,11 @@
+# Local: Process API rodando na mesma máquina.
+http:
+  listener:
+    port: "8081"
+api:
+  id: "0"
+papi:
+  protocol: "HTTP"
+  host: "localhost"
+  port: "8082"
+  clientId: "student-app-xapi-local"

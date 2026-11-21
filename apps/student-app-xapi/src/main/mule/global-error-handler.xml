@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Tratamento de erros global.
+    - On Error Continue: erros de cliente (4xx) do próprio contrato. São respostas esperadas, não
+      falhas da aplicação; o evento termina com sucesso e o listener devolve vars.httpStatus.
+      Recusas de negócio da Process API nem chegam aqui: voltam como resposta 4xx e são
+      traduzidas para o app no próprio flow.
+    - On Error Propagate: falhas técnicas (5xx). O evento falha, aparece nas métricas de erro e
+      o listener usa o error-response.
+    O mapeamento tipo de erro -> status/código fica em modules/ApiErrors.dwl, coberto por MUnit.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <error-handler name="global-error-handler">
+        <on-error-continue type="APIKIT:BAD_REQUEST, APIKIT:NOT_FOUND, APIKIT:METHOD_NOT_ALLOWED, APIKIT:NOT_ACCEPTABLE, APIKIT:UNSUPPORTED_MEDIA_TYPE" logException="false" doc:name="Erros de cliente e de negócio (4xx)">
+            <flow-ref name="build-error-response" doc:name="Monta resposta de erro"/>
+        </on-error-continue>
+        <on-error-propagate type="MULE:RETRY_EXHAUSTED, HTTP:CONNECTIVITY, HTTP:TIMEOUT, PROCESS:UNAVAILABLE" logException="false" doc:name="Process API indisponível (503)">
+            <flow-ref name="build-error-response" doc:name="Monta resposta de erro"/>
+        </on-error-propagate>
+        <on-error-propagate type="ANY" doc:name="Erro inesperado (500)">
+            <flow-ref name="build-error-response" doc:name="Monta resposta de erro"/>
+        </on-error-propagate>
+    </error-handler>
+
+    <sub-flow name="build-error-response">
+        <choice doc:name="Já tratado em um flow interno?">
+            <when expression="#[vars.apiError == null]">
+                <ee:transform doc:name="Traduz erro para o contrato da API">
+                    <ee:variables>
+                        <ee:set-variable variableName="apiError" resource="dw/to-api-error.dwl"/>
+                    </ee:variables>
+                </ee:transform>
+                <choice doc:name="Nível do log pela gravidade">
+                    <when expression="#[vars.apiError.status >= 500]">
+                        <logger level="ERROR" message='#[output application/json indent=false --- { event: "request.failed", httpStatus: vars.apiError.status, code: vars.apiError.body.code, errorType: error.errorType.namespace ++ ":" ++ error.errorType.identifier, cause: error.description }]' doc:name="Log de falha técnica"/>
+                    </when>
+                    <otherwise>
+                        <logger level="WARN" message='#[output application/json indent=false --- { event: "request.rejected", httpStatus: vars.apiError.status, code: vars.apiError.body.code, errorType: error.errorType.namespace ++ ":" ++ error.errorType.identifier }]' doc:name="Log de rejeição"/>
+                    </otherwise>
+                </choice>
+            </when>
+        </choice>
+        <set-variable variableName="httpStatus" value="#[vars.apiError.status]" doc:name="Status HTTP"/>
+        <set-payload value="#[output application/json --- vars.apiError.body]" doc:name="Corpo no contrato de erro"/>
+    </sub-flow>
+</mule>
