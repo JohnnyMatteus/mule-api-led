@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes dos flows da Studio System API com o SaaS de estúdios simulado (mock do requester). -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="studio-sapi-flows-test-suite.xml"/>
+
+    <munit:test name="get-student-returns-canonical-student" description="Busca o membro no estúdio e devolve o aluno canônico">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Estúdio responde 200">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/studio-member-to-student/input.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="Requisição GET /students/stu-001">
+                <munit:attributes value="#[{ uriParams: { studentId: 'stu-001' }, headers: { 'x-correlation-id': 'corr-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="get:\students\(studentId):studio-sapi-config" doc:name="Operação getStudent"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/studio-member-to-student/expected.json', 'application/json'))]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="get-student-not-found-returns-404-contract" description="404 do estúdio vira 404 no contrato de erro, sem retry">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Estúdio responde 404">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value='#[{ message: "member not found" }]' mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 404 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="Requisição GET /students/stu-404">
+                <munit:attributes value="#[{ uriParams: { studentId: 'stu-404' }, headers: {} }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="get:\students\(studentId):studio-sapi-config" doc:name="Operação getStudent"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(404)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('NOT_FOUND')]"/>
+            <munit-tools:assert-that expression="#[payload.correlationId]" is="#[MunitTools::notNullValue()]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="get-class-retries-then-returns-503" description="Falha de conexão é repetida maxRetries vezes e termina em 503">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Estúdio fora do ar">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="HTTP:CONNECTIVITY"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="Requisição GET /classes/cls-101">
+                <munit:attributes value="#[{ uriParams: { classId: 'cls-101' }, headers: {} }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="get:\classes\(classId):studio-sapi-config" doc:name="Operação getClass"/>
+                <error-handler>
+                    <on-error-continue type="MULE:RETRY_EXHAUSTED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('RETRY_EXHAUSTED')]"/>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(503)]"/>
+            <!-- 1 tentativa original + 3 retries (retry.maxRetries em config/common.yaml). -->
+            <munit-tools:verify-call processor="http:request" times="4">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="create-reservation-conflict-returns-409" description="Aula lotada no estúdio (409) vira 409 CONFLICT">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Estúdio responde 409">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value='#[{ message: "session is full" }]' mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 409 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="Requisição POST /reservations">
+                <munit:payload value="#[readUrl('classpath://fixtures/reservation-request-to-booking/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\reservations:application\json:studio-sapi-config" doc:name="Operação createReservation"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(409)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('CONFLICT')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="cancel-reservation-is-idempotent" description="Cancelar reserva já inexistente (404 no estúdio) devolve 204">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Estúdio responde 404">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="SaaS de estúdios"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value='#[{ message: "booking not found" }]' mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 404 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="Requisição DELETE /reservations/rsv-9f2a">
+                <munit:attributes value="#[{ uriParams: { reservationId: 'rsv-9f2a' }, headers: {} }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="delete:\reservations\(reservationId):studio-sapi-config" doc:name="Operação cancelReservation"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(204)]"/>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::nullValue()]"/>
+        </munit:validation>
+    </munit:test>
+</mule>

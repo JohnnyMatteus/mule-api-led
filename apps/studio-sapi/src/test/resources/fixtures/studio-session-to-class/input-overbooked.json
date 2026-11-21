@@ -1,0 +1,9 @@
+{
+  "id": "cls-102",
+  "name": "Pilates Solo",
+  "kind": "pilates",
+  "starts_at": "2026-12-01T18:30:00-03:00",
+  "capacity": 8,
+  "booked": 9,
+  "price_cents": 12990
+}
