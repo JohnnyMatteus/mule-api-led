@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Specs, XML, governança e contratos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instala xmllint
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libxml2-utils
+
+      - name: Instala ferramentas de validação
+        run: npm ci
+
+      - name: Lint das specs OAS (Spectral + regras da casa)
+        run: npm run lint:specs
+
+      - name: XML bem-formado (POMs, flows, MUnit)
+        run: npm run lint:xml
+
+      - name: Testes de governança, contrato e ruleset
+        run: npm test
+
+  integration:
+    name: Integração contra mocks (WireMock + Prism)
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instala ferramentas de validação
+        run: npm ci
+
+      - name: Sobe os mocks e espera ficarem saudáveis
+        run: docker compose --profile core up -d --wait
+
+      - name: Testes de integração
+        run: npm run test:integration
+
+      - name: Logs dos mocks em caso de falha
+        if: failure()
+        run: docker compose --profile core logs --no-color
+
+      - name: Derruba os mocks
+        if: always()
+        run: docker compose --profile core down
