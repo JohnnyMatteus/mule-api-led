@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: Student App Experience API
+  version: 1.0.0
+  description: |
+    Experience API do app do aluno. Entrega exatamente o que a tela de inscrição precisa,
+    com textos prontos para exibir e valores formatados. Não tem regra de negócio:
+    traduz o pedido do app para a Process API de matrícula e a resposta de volta.
+  contact:
+    name: Time do App do Aluno (fictício)
+    email: app-aluno@example.com
+  x-api-layer: experience
+  x-owner-team: app-aluno
+servers:
+  - url: http://localhost:8081/api
+    description: Local
+tags:
+  - name: enrollments
+    description: Inscrições do aluno autenticado
+paths:
+  /me/enrollments:
+    post:
+      tags: [enrollments]
+      operationId: enrollInClass
+      summary: Inscreve o aluno autenticado numa aula
+      description: |
+        O aluno vem do header X-Student-Id, preenchido pelo gateway depois de validar o token
+        (plataforma de entrada, fora deste repositório). O app gera a Idempotency-Key por toque
+        no botão, então reenviar após timeout não cobra duas vezes.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/StudentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppEnrollmentRequest"
+      responses:
+        "201":
+          description: Inscrição confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppEnrollment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Opcional na borda; se ausente, o Mule gera um e devolve no header da resposta.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Gerada pelo app por intenção de inscrição.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 48
+    StudentId:
+      name: X-Student-Id
+      in: header
+      required: true
+      description: Aluno autenticado, injetado pelo gateway.
+      schema:
+        type: string
+        pattern: "^stu-[a-z0-9]+$"
+  responses:
+    BadRequest:
+      description: Pedido inválido
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Aula não encontrada
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Aula lotada
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: Pagamento recusado ou cadastro inativo
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Serviço temporariamente indisponível
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    AppEnrollmentRequest:
+      type: object
+      required: [classId, cardToken]
+      additionalProperties: false
+      properties:
+        classId:
+          type: string
+          pattern: "^cls-[a-z0-9]+$"
+          example: cls-101
+        cardToken:
+          type: string
+          minLength: 8
+          example: tok-test-0001
+    AppEnrollment:
+      type: object
+      required: [enrollmentId, headline, classTitle, classStartsAt, amountLabel, receiptPending]
+      properties:
+        enrollmentId:
+          type: string
+          example: rsv-9f2a
+        headline:
+          type: string
+          example: Inscrição confirmada!
+        classTitle:
+          type: string
+          example: Vinyasa Iniciante
+        classStartsAt:
+          type: string
+          format: date-time
+        amountLabel:
+          type: string
+          example: R$ 150,00
+        receiptPending:
+          type: boolean
+          description: true quando o recibo ainda não foi emitido pelo financeiro.
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code:
+          type: string
+          example: CLASS_FULL
+        message:
+          type: string
+          description: Texto pronto para exibir ao aluno.
+          example: Esta aula lotou. Que tal outro horário?
+        correlationId:
+          type: string
+        details:
+          type: array
+          items:
+            type: string

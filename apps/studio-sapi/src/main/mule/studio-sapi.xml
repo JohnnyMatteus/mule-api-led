@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interface da System API: roteamento pelo contrato OAS e um flow por operação. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <flow name="studio-sapi-main">
+        <!-- O listener adota o X-Correlation-ID recebido como correlationId do evento (ou gera um). -->
+        <http:listener config-ref="studio-sapi-listener-config" path="/api/*" doc:name="HTTP /api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="studio-sapi-config" doc:name="Roteia e valida pelo contrato"/>
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <flow name="get:\students\(studentId):studio-sapi-config">
+        <set-variable variableName="backendRequest" value="#[{ method: 'GET', path: '/v1/members/' ++ attributes.uriParams.studentId }]" doc:name="Chamada ao estúdio"/>
+        <flow-ref name="call-studio-backend" doc:name="Chama o estúdio com retry"/>
+        <ee:transform doc:name="Membro do estúdio para aluno canônico">
+            <ee:message>
+                <ee:set-payload resource="dw/studio-member-to-student.dwl"/>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <flow name="get:\classes\(classId):studio-sapi-config">
+        <set-variable variableName="backendRequest" value="#[{ method: 'GET', path: '/v1/sessions/' ++ attributes.uriParams.classId }]" doc:name="Chamada ao estúdio"/>
+        <flow-ref name="call-studio-backend" doc:name="Chama o estúdio com retry"/>
+        <ee:transform doc:name="Sessão do estúdio para aula canônica">
+            <ee:message>
+                <ee:set-payload resource="dw/studio-session-to-class.dwl"/>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <flow name="post:\reservations:application\json:studio-sapi-config">
+        <set-variable variableName="idempotencyKey" value="#[attributes.headers['idempotency-key']]" doc:name="Idempotency-Key"/>
+        <set-variable variableName="backendRequest" value="#[{ method: 'POST', path: '/v1/bookings' }]" doc:name="Chamada ao estúdio"/>
+        <ee:transform doc:name="Reserva canônica para booking do estúdio">
+            <ee:message>
+                <ee:set-payload resource="dw/reservation-request-to-booking.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <flow-ref name="call-studio-backend" doc:name="Chama o estúdio com retry"/>
+        <ee:transform doc:name="Booking do estúdio para reserva canônica">
+            <ee:message>
+                <ee:set-payload resource="dw/booking-to-reservation.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="httpStatus" value="#[201]" doc:name="201 Created"/>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "studio.reservation.created", reservationId: payload.id, classId: payload.classId }]' doc:name="Log reserva criada"/>
+    </flow>
+
+    <flow name="delete:\reservations\(reservationId):studio-sapi-config">
+        <set-variable variableName="reservationId" value="#[attributes.uriParams.reservationId]" doc:name="reservationId"/>
+        <set-variable variableName="backendRequest" value="#[{ method: 'DELETE', path: '/v1/bookings/' ++ vars.reservationId }]" doc:name="Chamada ao estúdio"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <try doc:name="Cancelamento idempotente">
+            <flow-ref name="call-studio-backend" doc:name="Chama o estúdio com retry"/>
+            <error-handler>
+                <!-- Reserva inexistente ou já liberada: o efeito desejado já aconteceu. -->
+                <on-error-continue type="STUDIO:NOT_FOUND" logException="false" doc:name="Já liberada">
+                    <logger level="INFO" message='#[output application/json indent=false --- { event: "studio.reservation.already-cancelled", reservationId: vars.reservationId }]' doc:name="Log já liberada"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+        <set-payload value="#[null]" doc:name="204 sem corpo"/>
+        <set-variable variableName="httpStatus" value="#[204]" doc:name="204 No Content"/>
+    </flow>
+
+    <flow name="post:\reservations\(reservationId)\confirmation:studio-sapi-config">
+        <set-variable variableName="idempotencyKey" value="#[attributes.headers['idempotency-key']]" doc:name="Idempotency-Key"/>
+        <set-variable variableName="backendRequest" value="#[{ method: 'POST', path: '/v1/bookings/' ++ attributes.uriParams.reservationId ++ '/confirm' }]" doc:name="Chamada ao estúdio"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <flow-ref name="call-studio-backend" doc:name="Chama o estúdio com retry"/>
+        <ee:transform doc:name="Booking do estúdio para reserva canônica">
+            <ee:message>
+                <ee:set-payload resource="dw/booking-to-reservation.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "studio.reservation.confirmed", reservationId: payload.id }]' doc:name="Log reserva confirmada"/>
+    </flow>
+</mule>

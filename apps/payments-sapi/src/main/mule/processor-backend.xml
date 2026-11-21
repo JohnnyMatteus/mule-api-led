@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Acesso ao processador de pagamentos. Mesmo padrão de retry das outras System APIs:
+    só falhas transitórias são repetidas, e a Idempotency-Key garante que repetir não cobra
+    duas vezes. 402 é a recusa do cartão: não é erro técnico e segue para o mapeamento.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <sub-flow name="call-processor">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry em falha transitória">
+            <http:request config-ref="processor-config" method="POST" path="/v1/payments" responseTimeout="${processor.timeoutMs}" doc:name="Processador de pagamentos">
+                <http:headers>#[{ 'Idempotency-Key': vars.idempotencyKey }]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..299,400..499"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="Traduz 4xx do processador">
+            <when expression="#[attributes.statusCode == 402]">
+                <logger level="INFO" message='#[output application/json indent=false --- { event: "payments.charge.declined", reference: payload.merchant_reference, declineCode: payload.decline_code }]' doc:name="Recusa não é erro técnico"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="PAYMENTS:REJECTED" description="Processador rejeitou a cobrança por dados inválidos"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>

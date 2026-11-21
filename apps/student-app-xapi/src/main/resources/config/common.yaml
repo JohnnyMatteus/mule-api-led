@@ -1,0 +1,10 @@
+# Valores iguais em todos os ambientes.
+# Retry curto: a Process API já protege as etapas dela. Aqui só se repete quando ela não respondeu.
+http:
+  listener:
+    host: "0.0.0.0"
+retry:
+  maxRetries: "1"
+  intervalMs: "300"
+papi:
+  timeoutMs: "30000"

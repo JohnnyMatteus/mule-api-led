@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Orquestração da matrícula paga (saga orquestrada, sem coordenador distribuído):
+
+      1. carrega aluno e aula (Studio)          falha: 404 / 503, nada a desfazer
+      2. valida elegibilidade (DataWeave)       falha: 422 / 409, nada a desfazer
+      3. reserva a vaga (Studio, hold)          falha: 409 aula lotada
+      4. cobra (Payments)                       recusa: libera a vaga (compensação) e 422
+                                                sem resposta: 503, a vaga expira sozinha
+      5. confirma a reserva (Studio)            reserva expirada: 409 e log de estorno pendente
+      6. registra o título (FinERP)             best-effort: falha vira erpSync=PENDING
+
+    Cada escrita usa uma Idempotency-Key derivada da chave do cliente (chave:etapa), então
+    o cliente pode repetir a requisição inteira com a mesma chave sem duplicar efeitos.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <sub-flow name="enroll-student">
+        <set-variable variableName="request" value="#[payload]" doc:name="Pedido original"/>
+        <set-variable variableName="enrollmentKey" value="#[attributes.headers['idempotency-key']]" doc:name="Chave de idempotência do cliente"/>
+        <set-variable variableName="requestedAt" value="#[now()]" doc:name="Instante do pedido"/>
+        <set-variable variableName="businessDate" value="#[((now() &gt;&gt; 'America/Sao_Paulo') as Date) as String { format: 'yyyy-MM-dd' }]" doc:name="Data contábil (fuso de Brasília)"/>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "enrollment.started", studentId: vars.request.studentId, classId: vars.request.classId }]' doc:name="Log início"/>
+
+        <flow-ref name="load-student-and-class" doc:name="1. Aluno e aula"/>
+        <flow-ref name="check-eligibility" doc:name="2. Elegibilidade"/>
+        <flow-ref name="reserve-seat" doc:name="3. Reserva a vaga"/>
+        <flow-ref name="charge-student" doc:name="4. Cobra"/>
+        <flow-ref name="confirm-reservation" doc:name="5. Confirma"/>
+        <flow-ref name="sync-receivable" doc:name="6. Título no ERP (best-effort)"/>
+
+        <ee:transform doc:name="Resposta da matrícula">
+            <ee:message>
+                <ee:set-payload resource="dw/enrollment-response.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="httpStatus" value="#[201]" doc:name="201 Created"/>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "enrollment.completed", enrollmentId: payload.id, chargeId: payload.charge.id, erpSync: payload.erpSync.status }]' doc:name="Log fim"/>
+    </sub-flow>
+
+    <sub-flow name="load-student-and-class">
+        <set-variable variableName="sapiRequest" value="#[{ method: 'GET', path: '/students/' ++ vars.request.studentId }]" doc:name="GET aluno"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <flow-ref name="call-studio-sapi" doc:name="GET aluno (Studio)"/>
+        <choice doc:name="Aluno encontrado?">
+            <when expression="#[attributes.statusCode == 404]">
+                <raise-error type="ENROLLMENT:STUDENT_NOT_FOUND" description="Aluno não encontrado no estúdio"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:INTEGRATION_ERROR" description="Resposta inesperada da Studio System API ao buscar aluno"/>
+            </when>
+        </choice>
+        <set-variable variableName="student" value="#[payload]" doc:name="vars.student"/>
+
+        <set-variable variableName="sapiRequest" value="#[{ method: 'GET', path: '/classes/' ++ vars.request.classId }]" doc:name="GET aula"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <flow-ref name="call-studio-sapi" doc:name="GET aula (Studio)"/>
+        <choice doc:name="Aula encontrada?">
+            <when expression="#[attributes.statusCode == 404]">
+                <raise-error type="ENROLLMENT:CLASS_NOT_FOUND" description="Aula não encontrada no estúdio"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:INTEGRATION_ERROR" description="Resposta inesperada da Studio System API ao buscar aula"/>
+            </when>
+        </choice>
+        <set-variable variableName="studioClass" value="#[payload]" doc:name="vars.studioClass"/>
+    </sub-flow>
+
+    <sub-flow name="check-eligibility">
+        <ee:transform doc:name="Regras de elegibilidade">
+            <ee:variables>
+                <ee:set-variable variableName="eligibility" resource="dw/enrollment-eligibility.dwl"/>
+            </ee:variables>
+        </ee:transform>
+        <choice doc:name="Primeira violação, por prioridade">
+            <when expression="#[vars.eligibility.violations contains 'STUDENT_INACTIVE']">
+                <raise-error type="ENROLLMENT:STUDENT_INACTIVE" description="Cadastro do aluno está inativo"/>
+            </when>
+            <when expression="#[vars.eligibility.violations contains 'CLASS_ALREADY_STARTED']">
+                <raise-error type="ENROLLMENT:CLASS_ALREADY_STARTED" description="A aula já começou"/>
+            </when>
+            <when expression="#[vars.eligibility.violations contains 'CLASS_FULL']">
+                <raise-error type="ENROLLMENT:CLASS_FULL" description="Aula sem vagas"/>
+            </when>
+        </choice>
+    </sub-flow>
+
+    <sub-flow name="reserve-seat">
+        <ee:transform doc:name="Pedido de reserva">
+            <ee:message>
+                <ee:set-payload resource="dw/build-reservation-request.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="sapiRequest" value="#[{ method: 'POST', path: '/reservations', idempotencyKey: vars.enrollmentKey ++ ':reserve' }]" doc:name="POST reserva"/>
+        <flow-ref name="call-studio-sapi" doc:name="POST reserva (Studio)"/>
+        <choice doc:name="Reserva criada?">
+            <when expression="#[attributes.statusCode == 409]">
+                <raise-error type="ENROLLMENT:CLASS_FULL" description="Aula lotou durante a reserva"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:INTEGRATION_ERROR" description="Resposta inesperada da Studio System API ao reservar"/>
+            </when>
+        </choice>
+        <set-variable variableName="reservation" value="#[payload]" doc:name="vars.reservation"/>
+    </sub-flow>
+
+    <sub-flow name="charge-student">
+        <ee:transform doc:name="Pedido de cobrança">
+            <ee:message>
+                <ee:set-payload resource="dw/build-charge-request.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="sapiRequest" value="#[{ method: 'POST', path: '/charges', idempotencyKey: vars.enrollmentKey ++ ':charge' }]" doc:name="POST cobrança"/>
+        <flow-ref name="call-payments-sapi" doc:name="POST cobrança (Payments)"/>
+        <choice doc:name="Cobrança processada?">
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:INTEGRATION_ERROR" description="Payments System API rejeitou o pedido de cobrança"/>
+            </when>
+        </choice>
+        <set-variable variableName="charge" value="#[payload]" doc:name="vars.charge"/>
+        <choice doc:name="Aprovada?">
+            <when expression="#[vars.charge.status != 'APPROVED']">
+                <flow-ref name="release-seat" doc:name="Compensação: libera a vaga"/>
+                <raise-error type="ENROLLMENT:PAYMENT_DECLINED" description="Pagamento não aprovado"/>
+            </when>
+        </choice>
+    </sub-flow>
+
+    <sub-flow name="confirm-reservation">
+        <set-variable variableName="sapiRequest" value="#[{ method: 'POST', path: '/reservations/' ++ vars.reservation.id ++ '/confirmation', idempotencyKey: vars.enrollmentKey ++ ':confirm' }]" doc:name="POST confirmação"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <flow-ref name="call-studio-sapi" doc:name="POST confirmação (Studio)"/>
+        <choice doc:name="Confirmada?">
+            <when expression="#[attributes.statusCode == 409]">
+                <logger level="ERROR" message='#[output application/json indent=false --- { event: "enrollment.refund.required", reservationId: vars.reservation.id, chargeId: vars.charge.id, reason: "reservation expired after charge" }]' doc:name="Estorno pendente"/>
+                <raise-error type="ENROLLMENT:RESERVATION_EXPIRED" description="A reserva expirou antes da confirmação; estorno pendente"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:INTEGRATION_ERROR" description="Resposta inesperada da Studio System API ao confirmar"/>
+            </when>
+        </choice>
+        <set-variable variableName="reservation" value="#[payload]" doc:name="vars.reservation confirmada"/>
+    </sub-flow>
+
+    <!--
+        Compensação best-effort. Se liberar a vaga falhar, o hold expira sozinho no estúdio;
+        a recusa do pagamento continua sendo a resposta ao cliente.
+    -->
+    <flow name="release-seat">
+        <set-variable variableName="sapiRequest" value="#[{ method: 'DELETE', path: '/reservations/' ++ vars.reservation.id }]" doc:name="DELETE reserva"/>
+        <set-payload value="#[null]" doc:name="Sem corpo"/>
+        <flow-ref name="call-studio-sapi" doc:name="DELETE reserva (Studio)"/>
+        <choice doc:name="Liberada?">
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:COMPENSATION_FAILED" description="Studio System API não liberou a reserva"/>
+            </when>
+        </choice>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "enrollment.seat.released", reservationId: vars.reservation.id }]' doc:name="Log vaga liberada"/>
+        <error-handler>
+            <on-error-continue type="ANY" logException="false" doc:name="Compensação não derruba a resposta">
+                <logger level="WARN" message='#[output application/json indent=false --- { event: "enrollment.compensation.failed", reservationId: vars.reservation.id, cause: error.description }]' doc:name="Log compensação falhou"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+
+    <!--
+        Registro no ERP depois que o dinheiro foi capturado e a vaga confirmada. Nada que aconteça
+        com o ERP desfaz a matrícula: qualquer falha vira erpSync=PENDING para reprocessamento.
+    -->
+    <flow name="sync-receivable">
+        <ee:transform doc:name="Pedido de título">
+            <ee:message>
+                <ee:set-payload resource="dw/build-receivable-request.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <set-variable variableName="sapiRequest" value="#[{ method: 'POST', path: '/receivables', idempotencyKey: vars.enrollmentKey ++ ':receivable' }]" doc:name="POST título"/>
+        <flow-ref name="call-finerp-sapi" doc:name="POST título (FinERP)"/>
+        <choice doc:name="Título registrado?">
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="ENROLLMENT:ERP_REJECTED" description="FinERP System API rejeitou o título"/>
+            </when>
+        </choice>
+        <set-variable variableName="erpSync" value="#[{ status: 'SYNCED', receivableId: payload.id }]" doc:name="erpSync SYNCED"/>
+        <error-handler>
+            <on-error-continue type="ANY" logException="false" doc:name="ERP é best-effort">
+                <set-variable variableName="erpSync" value="#[{ status: 'PENDING' }]" doc:name="erpSync PENDING"/>
+                <logger level="WARN" message='#[output application/json indent=false --- { event: "enrollment.erp-sync.pending", reservationId: vars.reservation.id, errorType: error.errorType.namespace ++ ":" ++ error.errorType.identifier }]' doc:name="Log ERP pendente"/>
+            </on-error-continue>
+        </error-handler>
+    </flow>
+</mule>

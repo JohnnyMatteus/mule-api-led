@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes das transformações DataWeave da Payments System API, com payloads fictícios. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <munit:config name="payments-transformations-test-suite.xml"/>
+
+    <munit:test name="charge-to-processor-converts-to-minor-units" description="Converte valor para centavos, método para minúsculas e trunca o descritor em 22 caracteres">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/charge-request-to-processor.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/charge-request-to-processor/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/charge-request-to-processor/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="charge-to-processor-handles-pix-and-fractional-amount" description="PIX sem token e valor fracionado (129,90) sem erro de arredondamento">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/charge-request-to-processor/input-pix-fractional.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/charge-request-to-processor.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/charge-request-to-processor/expected-pix-fractional.json', 'application/json'))]" message="Saída difere do esperado em fixtures/charge-request-to-processor/expected-pix-fractional.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="processor-to-charge-maps-captured-as-approved" description="captured vira APPROVED, sem declineReason">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-captured.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/processor-to-charge.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/processor-to-charge/expected-approved.json', 'application/json'))]" message="Saída difere do esperado em fixtures/processor-to-charge/expected-approved.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="processor-to-charge-maps-decline-reason" description="Recusa por saldo vira DECLINED com INSUFFICIENT_FUNDS">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-declined.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/processor-to-charge.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/processor-to-charge/expected-declined.json', 'application/json'))]" message="Saída difere do esperado em fixtures/processor-to-charge/expected-declined.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="processor-to-charge-unknown-decline-code-is-other" description="Código de recusa fora do mapa vira OTHER">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-declined-unknown-code.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/processor-to-charge.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.status]" is="#[MunitTools::equalTo('DECLINED')]"/>
+            <munit-tools:assert-that expression="#[payload.declineReason]" is="#[MunitTools::equalTo('OTHER')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="processor-to-charge-fails-on-unknown-status" description="Status desconhecido falha em vez de aprovar por engano" expectedErrorType="MULE:EXPRESSION">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/processor-to-charge/input-unknown-status.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/processor-to-charge.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-rejected-to-422" description="Rejeição do processador vira 422 com details">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('PAYMENTS:REJECTED', 'Processador rejeitou a cobrança por dados inválidos', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/rejected-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/rejected-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-timeout-to-503" description="Timeout vira 503 orientando retry com a mesma chave">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('HTTP:TIMEOUT', 'Read timed out', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/timeout-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/timeout-expected.json"/>
+        </munit:validation>
+    </munit:test>
+</mule>

@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes das transformações e regras DataWeave da Enrollment Process API, com payloads fictícios. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <munit:config name="enrollment-transformations-test-suite.xml"/>
+
+    <munit:test name="eligibility-accepts-active-student-with-seats" description="Aluno ativo, aula futura com vagas: elegível">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-eligibility.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-eligibility/expected-eligible.json', 'application/json'))]" message="Saída difere do esperado em fixtures/enrollment-eligibility/expected-eligible.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="eligibility-reports-all-violations" description="Aluno inativo, aula iniciada e lotada: devolve as três violações">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student-inactive.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class-full.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-12-01T19:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-eligibility.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-eligibility/expected-all-violations.json', 'application/json'))]" message="Saída difere do esperado em fixtures/enrollment-eligibility/expected-all-violations.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="eligibility-class-starting-now-is-not-eligible" description="Pedido no instante exato do início da aula já é tarde (borda inclusiva)">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-12-01T07:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-eligibility.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.violations]" is="#[MunitTools::equalTo(['CLASS_ALREADY_STARTED'])]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="eligibility-compares-instants-across-time-zones" description="06:59 em Brasília equivale a 09:59Z: ainda elegível">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-12-01T09:59:00Z']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-eligibility.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.eligible]" is="#[MunitTools::equalTo(true)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="build-reservation-request-uses-request-ids" description="Reserva usa aluno e aula do pedido">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/build-reservation-request.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/build-reservation-request/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/build-reservation-request/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="build-charge-request-uses-studio-price" description="Cobrança usa o preço do estúdio e a reserva como referência">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/build-charge-request.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/build-charge-request/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/build-charge-request/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="build-charge-request-truncates-long-description" description="Título longo de aula não estoura o limite de 80 do contrato de pagamentos">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class-long-title.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/build-charge-request.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[sizeOf(payload.description)]" is="#[MunitTools::equalTo(80)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="build-receivable-request-uses-business-date" description="Título com emissão e vencimento na data contábil e a cobrança como referência de pagamento">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/build-receivable-request.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/build-receivable-request/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/build-receivable-request/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enrollment-response-with-erp-synced" description="Resposta com título registrado no ERP">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                    <munit:variable key="erpSync" value="#[{ status: 'SYNCED', receivableId: 'rcv-000123' }]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-response.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-response/expected-synced.json', 'application/json'))]" message="Saída difere do esperado em fixtures/enrollment-response/expected-synced.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enrollment-response-with-erp-pending" description="Resposta com ERP pendente não expõe receivableId">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:variables>
+                    <munit:variable key="request" value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]"/>
+                    <munit:variable key="student" value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]"/>
+                    <munit:variable key="studioClass" value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]"/>
+                    <munit:variable key="reservation" value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]"/>
+                    <munit:variable key="charge" value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]"/>
+                    <munit:variable key="businessDate" value="#['2026-11-21']"/>
+                    <munit:variable key="requestedAt" value="#['2026-11-21T10:00:00-03:00']"/>
+                    <munit:variable key="erpSync" value="#[{ status: 'PENDING' }]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-response.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-response/expected-pending.json', 'application/json'))]" message="Saída difere do esperado em fixtures/enrollment-response/expected-pending.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-payment-declined" description="Pagamento recusado vira 422 PAYMENT_DECLINED">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('ENROLLMENT:PAYMENT_DECLINED', 'Pagamento não aprovado', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/payment-declined-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/payment-declined-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-hides-integration-details" description="Erro de integração vira 500 sem detalhes internos">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('ENROLLMENT:INTEGRATION_ERROR', 'Resposta inesperada da Studio System API', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/integration-error-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/integration-error-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-each-upstream-to-503" description="Indisponibilidade de qualquer System API vira 503">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+['STUDIO:UNAVAILABLE', 'PAYMENTS:UNAVAILABLE', 'MULE:RETRY_EXHAUSTED'] map fromError($, null, 'corr-test-0001').status]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo([503, 503, 503])]"/>
+        </munit:validation>
+    </munit:test>
+</mule>

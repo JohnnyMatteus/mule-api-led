@@ -1,0 +1,9 @@
+{
+  "id": "cls-101",
+  "name": "Vinyasa Iniciante",
+  "kind": "yoga",
+  "starts_at": "2026-12-01T07:00:00-03:00",
+  "capacity": 12,
+  "booked": 7,
+  "price_cents": 15000
+}

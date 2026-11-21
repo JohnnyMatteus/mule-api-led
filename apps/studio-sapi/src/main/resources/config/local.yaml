@@ -1,0 +1,11 @@
+# Local: backends simulados pelo WireMock do docker-compose.
+http:
+  listener:
+    port: "8083"
+api:
+  id: "0"
+studio:
+  protocol: "HTTP"
+  host: "localhost"
+  port: "9090"
+  basePath: "/studio"

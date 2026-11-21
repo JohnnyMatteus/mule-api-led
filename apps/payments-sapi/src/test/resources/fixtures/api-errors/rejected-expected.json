@@ -1,0 +1,9 @@
+{
+  "status": 422,
+  "body": {
+    "code": "REJECTED_BY_PROCESSOR",
+    "message": "O processador rejeitou os dados da cobrança",
+    "correlationId": "corr-test-0001",
+    "details": ["Processador rejeitou a cobrança por dados inválidos"]
+  }
+}

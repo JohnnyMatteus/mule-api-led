@@ -1,0 +1,8 @@
+{
+  "status": 503,
+  "body": {
+    "code": "TEMPORARILY_UNAVAILABLE",
+    "message": "Estamos com instabilidade. Tente de novo em instantes; você não será cobrado duas vezes.",
+    "correlationId": "corr-test-0001"
+  }
+}

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interface da Experience API do app do aluno. Sem regra de negócio: traduz pedido e resposta. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <flow name="student-app-xapi-main">
+        <!-- O listener adota o X-Correlation-ID recebido como correlationId do evento (ou gera um). -->
+        <http:listener config-ref="student-app-xapi-listener-config" path="/api/*" doc:name="HTTP /api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[(vars.outboundHeaders default {}) ++ { 'X-Correlation-ID': correlationId }]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="student-app-xapi-config" doc:name="Roteia e valida pelo contrato"/>
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <flow name="post:\me\enrollments:application\json:student-app-xapi-config">
+        <!-- X-Student-Id é preenchido pelo gateway depois de validar o token do aluno. -->
+        <set-variable variableName="studentId" value="#[attributes.headers['x-student-id']]" doc:name="Aluno autenticado"/>
+        <set-variable variableName="idempotencyKey" value="#[attributes.headers['idempotency-key']]" doc:name="Idempotency-Key do app"/>
+        <ee:transform doc:name="Pedido do app para a Process API">
+            <ee:message>
+                <ee:set-payload resource="dw/app-request-to-enrollment.dwl"/>
+            </ee:message>
+        </ee:transform>
+        <flow-ref name="call-enrollment-papi" doc:name="POST matrícula (Process)"/>
+        <set-variable variableName="upstreamStatus" value="#[attributes.statusCode]" doc:name="Status da Process API"/>
+        <choice doc:name="Matrícula confirmada?">
+            <when expression="#[vars.upstreamStatus == 201]">
+                <ee:transform doc:name="Matrícula para a tela do app">
+                    <ee:message>
+                        <ee:set-payload resource="dw/enrollment-to-app-response.dwl"/>
+                    </ee:message>
+                </ee:transform>
+                <set-variable variableName="httpStatus" value="#[201]" doc:name="201 Created"/>
+            </when>
+            <otherwise>
+                <!-- Recusa de negócio (404, 409, 422): mesmo status, mensagem pronta para o aluno. -->
+                <ee:transform doc:name="Erro da Process API para mensagem do app">
+                    <ee:message>
+                        <ee:set-payload resource="dw/process-error-to-app-error.dwl"/>
+                    </ee:message>
+                </ee:transform>
+                <set-variable variableName="httpStatus" value="#[vars.upstreamStatus]" doc:name="Repassa o status"/>
+            </otherwise>
+        </choice>
+        <logger level="INFO" message='#[output application/json indent=false --- { event: "app.enrollment.answered", httpStatus: vars.httpStatus, code: payload.code default "CONFIRMED" }]' doc:name="Log resposta ao app"/>
+    </flow>
+</mule>

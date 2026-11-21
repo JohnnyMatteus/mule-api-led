@@ -1,0 +1,8 @@
+{
+  "status": 503,
+  "body": {
+    "code": "UPSTREAM_UNAVAILABLE",
+    "message": "Processador indisponível; tente novamente com a mesma Idempotency-Key",
+    "correlationId": "corr-test-0001"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "amount_minor": 12990,
+  "currency": "BRL",
+  "merchant_reference": "rsv-7b7b",
+  "customer": { "external_id": "stu-002", "name": "Bruno Exemplo", "email": "bruno@example.com" },
+  "payment_method": { "kind": "pix" },
+  "statement_descriptor": "PILATES SOLO"
+}

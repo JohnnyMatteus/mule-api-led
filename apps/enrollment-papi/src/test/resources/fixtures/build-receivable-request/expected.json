@@ -1,0 +1,10 @@
+{
+  "reference": "rsv-9f2a",
+  "customer": { "document": "00011122233", "name": "Ana Exemplo", "email": "ana@example.com" },
+  "amount": { "value": 150, "currency": "BRL" },
+  "issueDate": "2026-11-21",
+  "dueDate": "2026-11-21",
+  "costCenter": "CLASSES",
+  "description": "Matrícula Vinyasa Iniciante",
+  "paymentReference": "pay-7c1d"
+}

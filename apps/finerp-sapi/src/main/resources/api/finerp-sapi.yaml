@@ -1,0 +1,175 @@
+openapi: 3.0.3
+info:
+  title: FinERP System API
+  version: 1.0.0
+  description: |
+    System API do ERP financeiro fictício "FinERP Exemplo". Esconde o layout legado do ERP
+    (campos em maiúsculas, valores em centavos como texto, datas yyyyMMdd) atrás de um
+    contrato canônico de contas a receber.
+  contact:
+    name: Time de Integração (fictício)
+    email: integracao@example.com
+  x-api-layer: system
+  x-owner-team: integracao-financeiro
+servers:
+  - url: http://localhost:8084/api
+    description: Local
+tags:
+  - name: receivables
+    description: Títulos de contas a receber
+paths:
+  /receivables:
+    post:
+      tags: [receivables]
+      operationId: createReceivable
+      summary: Registra um título a receber no ERP
+      description: O ERP deduplica pela referência de negócio; repetir com a mesma referência devolve o título já existente.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableRequest"
+      responses:
+        "201":
+          description: Título registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Identificador de correlação propagado entre as camadas.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave que torna a criação segura para retry.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: O ERP rejeitou o título por regra própria
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: Falha de integração com o ERP (por exemplo, credencial recusada)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: ERP indisponível após as tentativas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Money:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: number
+          minimum: 0.01
+          multipleOf: 0.01
+          example: 150.00
+        currency:
+          type: string
+          enum: [BRL]
+    ReceivableRequest:
+      type: object
+      required: [reference, customer, amount, issueDate, dueDate, costCenter, description, paymentReference]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+          example: rsv-9f2a
+        customer:
+          type: object
+          required: [document, name, email]
+          additionalProperties: false
+          properties:
+            document:
+              type: string
+              pattern: "^[0-9]{11}$"
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+        amount:
+          $ref: "#/components/schemas/Money"
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        costCenter:
+          type: string
+          enum: [CLASSES, PRODUCTS]
+        description:
+          type: string
+          maxLength: 60
+        paymentReference:
+          type: string
+          description: Identificador da cobrança no processador de pagamentos.
+    Receivable:
+      type: object
+      required: [id, reference, status, erpDocumentNumber]
+      properties:
+        id:
+          type: string
+          example: rcv-000123
+        reference:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, SETTLED]
+        erpDocumentNumber:
+          type: string
+          example: "000123"
+    Error:
+      type: object
+      required: [code, message, correlationId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        details:
+          type: array
+          items:
+            type: string

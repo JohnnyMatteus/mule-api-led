@@ -1,0 +1,51 @@
+# MUnit (testes dos flows e dos DataWeave no runtime Mule).
+# Manual porque o MUnit baixa o runtime Mule EE do repositório EE da MuleSoft, que exige
+# credencial de cliente. Configure os secrets MULESOFT_NEXUS_USERNAME e MULESOFT_NEXUS_PASSWORD
+# no repositório e dispare pela aba Actions.
+name: MUnit (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: munit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  munit:
+    name: mvn test (MUnit + cobertura)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      MULESOFT_NEXUS_USERNAME: ${{ secrets.MULESOFT_NEXUS_USERNAME }}
+      MULESOFT_NEXUS_PASSWORD: ${{ secrets.MULESOFT_NEXUS_PASSWORD }}
+    steps:
+      - name: Confere credenciais do repositório EE
+        run: |
+          if [ -z "$MULESOFT_NEXUS_USERNAME" ] || [ -z "$MULESOFT_NEXUS_PASSWORD" ]; then
+            echo "::error::Defina os secrets MULESOFT_NEXUS_USERNAME e MULESOFT_NEXUS_PASSWORD (repositório EE da MuleSoft)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: MUnit de todas as aplicações
+        # devonly-changeme é a chave pública de desenvolvimento dos arquivos secure-local.yaml.
+        run: mvn -B -s ci/maven-settings.xml test -Dsecure.key=devonly-changeme
+
+      - name: Relatórios de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: munit-reports
+          path: apps/*/target/site/munit/
+          if-no-files-found: ignore

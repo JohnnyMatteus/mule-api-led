@@ -1,0 +1,9 @@
+{
+  "status": 404,
+  "body": {
+    "code": "NOT_FOUND",
+    "message": "Recurso não encontrado no estúdio",
+    "correlationId": "corr-test-0001",
+    "details": ["Recurso não encontrado no SaaS de estúdios"]
+  }
+}

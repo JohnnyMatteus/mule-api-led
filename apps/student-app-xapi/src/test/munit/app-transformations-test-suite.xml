@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes das transformações DataWeave da Student App Experience API, com payloads fictícios. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <munit:config name="app-transformations-test-suite.xml"/>
+
+    <munit:test name="app-request-uses-student-from-token" description="Aluno vem do header do gateway, não do corpo; método é sempre cartão tokenizado">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/app-request-to-enrollment/input.json', 'application/json')]" mediaType="application/json"/>
+                <munit:variables>
+                    <munit:variable key="studentId" value="#['stu-001']"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/app-request-to-enrollment.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/app-request-to-enrollment/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/app-request-to-enrollment/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enrollment-to-app-response-synced" description="Matrícula com ERP sincronizado: valor formatado e recibo disponível">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/enrollment-to-app-response/input-synced.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-to-app-response.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-to-app-response/expected-synced.json', 'application/json'))]" message="Saída difere do esperado em fixtures/enrollment-to-app-response/expected-synced.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enrollment-to-app-response-pending-receipt" description="ERP pendente vira receiptPending=true, sem expor detalhes do financeiro">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/enrollment-to-app-response/input-pending.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/enrollment-to-app-response.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.receiptPending]" is="#[MunitTools::equalTo(true)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="format-brl-uses-brazilian-separators" description="Milhar com ponto, decimal com vírgula e sempre duas casas">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import formatBrl from modules::AppFormat
+output application/json
+---
+{ a: formatBrl(1250.5), b: formatBrl(0), c: formatBrl(129.9), d: formatBrl(1000000) }]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.a]" is="#[MunitTools::equalTo('R\$ 1.250,50')]"/>
+            <munit-tools:assert-that expression="#[payload.b]" is="#[MunitTools::equalTo('R\$ 0,00')]"/>
+            <munit-tools:assert-that expression="#[payload.c]" is="#[MunitTools::equalTo('R\$ 129,90')]"/>
+            <munit-tools:assert-that expression="#[payload.d]" is="#[MunitTools::equalTo('R\$ 1.000.000,00')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="process-error-class-full-gets-friendly-message" description="CLASS_FULL vira mensagem pronta para o aluno, sem details internos">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/process-error-to-app-error/input-class-full.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/process-error-to-app-error.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/process-error-to-app-error/expected-class-full.json', 'application/json'))]" message="Saída difere do esperado em fixtures/process-error-to-app-error/expected-class-full.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="process-error-unknown-code-gets-fallback" description="Código sem mensagem específica usa o texto genérico e preserva o código">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/process-error-to-app-error/input-unknown-code.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/process-error-to-app-error.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('STUDENT_NOT_FOUND')]"/>
+            <munit-tools:assert-that expression="#[payload.message]" is="#[MunitTools::startsWith('Não foi possível concluir')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-process-unavailable-reassures-user" description="Process API fora do ar vira 503 avisando que não haverá cobrança dupla">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('PROCESS:UNAVAILABLE', 'Enrollment Process API indisponível', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/process-unavailable-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/process-unavailable-expected.json"/>
+        </munit:validation>
+    </munit:test>
+</mule>

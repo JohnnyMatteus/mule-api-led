@@ -1,0 +1,8 @@
+{
+  "payment_id": "pay-9e3f",
+  "status": "declined",
+  "decline_code": "do_not_honor",
+  "amount_minor": 15000,
+  "currency": "BRL",
+  "merchant_reference": "rsv-9f2a"
+}

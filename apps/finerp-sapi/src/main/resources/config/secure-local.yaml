@@ -1,0 +1,4 @@
+# Cifrado com a chave pública de desenvolvimento (veja docs/design-doc.md, seção Segurança).
+# Valor em claro: dev-only-finerp-password. Nunca use esta chave fora da máquina local.
+finerp:
+  password: "![2hcBJ/ox/9iE2kulcWe+zDTa4S8j5HBk5RwYNqMNSkM=]"

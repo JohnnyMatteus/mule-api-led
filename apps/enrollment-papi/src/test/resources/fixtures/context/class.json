@@ -1,0 +1,9 @@
+{
+  "id": "cls-101",
+  "title": "Vinyasa Iniciante",
+  "modality": "YOGA",
+  "startsAt": "2026-12-01T07:00:00-03:00",
+  "capacity": 12,
+  "availableSeats": 5,
+  "price": { "value": 150, "currency": "BRL" }
+}

@@ -1,0 +1,11 @@
+http:
+  listener:
+    port: "8081"
+api:
+  id: "10000301"
+papi:
+  basePath: "/api"
+  protocol: "HTTPS"
+  host: "enrollment-papi.internal.dev.example.com"
+  port: "443"
+  clientId: "student-app-xapi-dev"

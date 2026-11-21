@@ -1,0 +1,23 @@
+{
+  "mappings": [
+    {
+      "name": "FinERP: título criado (o ERP legado responde 200 com COD_RETORNO)",
+      "request": {
+        "method": "POST",
+        "urlPath": "/finerp/erp/v1/titulos",
+        "headers": {
+          "Authorization": {
+            "matches": "Basic .+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "finerp/finerp-to-receivable/input-created.json"
+      }
+    }
+  ]
+}

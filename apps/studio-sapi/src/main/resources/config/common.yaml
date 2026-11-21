@@ -1,0 +1,9 @@
+# Valores iguais em todos os ambientes.
+http:
+  listener:
+    host: "0.0.0.0"
+retry:
+  maxRetries: "3"
+  intervalMs: "500"
+studio:
+  timeoutMs: "5000"

@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes das transformações DataWeave da Studio System API, com payloads fictícios. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <munit:config name="studio-transformations-test-suite.xml"/>
+
+    <munit:test name="member-to-student-maps-canonical-fields" description="Normaliza nome, e-mail e documento do membro ativo">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/studio-member-to-student/input.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/studio-member-to-student.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/studio-member-to-student/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/studio-member-to-student/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="member-to-student-maps-inactive-flag" description="Membro com active=false vira status INACTIVE">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/studio-member-to-student/input-inactive.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/studio-member-to-student.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.status]" is="#[MunitTools::equalTo('INACTIVE')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="session-to-class-converts-cents-and-seats" description="Converte centavos em decimal e calcula vagas disponíveis">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/studio-session-to-class/input.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/studio-session-to-class.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/studio-session-to-class/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/studio-session-to-class/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="session-to-class-never-returns-negative-seats" description="Overbooking manual no estúdio resulta em zero vagas, nunca negativo">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/studio-session-to-class/input-overbooked.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/studio-session-to-class.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload.availableSeats]" is="#[MunitTools::equalTo(0)]"/>
+            <munit-tools:assert-that expression="#[payload.price.value]" is="#[MunitTools::equalTo(129.9)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="reservation-request-to-booking-asks-for-hold" description="Pede reserva temporária ao estúdio">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/reservation-request-to-booking/input.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/reservation-request-to-booking.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/reservation-request-to-booking/expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/reservation-request-to-booking/expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="booking-to-reservation-maps-held" description="Booking em hold vira reserva HELD com expiração">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/booking-to-reservation/input-held.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/booking-to-reservation.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/booking-to-reservation/expected-held.json', 'application/json'))]" message="Saída difere do esperado em fixtures/booking-to-reservation/expected-held.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="booking-to-reservation-omits-null-expiration" description="Booking confirmado sem expiração não expõe expiresAt">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/booking-to-reservation/input-confirmed.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/booking-to-reservation.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/booking-to-reservation/expected-confirmed.json', 'application/json'))]" message="Saída difere do esperado em fixtures/booking-to-reservation/expected-confirmed.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="booking-to-reservation-fails-on-unknown-state" description="Estado fora do mapeamento falha em vez de violar o contrato" expectedErrorType="MULE:EXPRESSION">
+        <munit:behavior>
+            <munit:set-event doc:name="Payload fictício">
+                <munit:payload value="#[readUrl('classpath://fixtures/booking-to-reservation/input-unknown-state.json', 'application/json')]" mediaType="application/json"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload resource="dw/booking-to-reservation.dwl"/>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+    </munit:test>
+
+    <munit:test name="api-errors-maps-business-error-with-details" description="Erro de negócio vira 404 com a descrição em details">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('STUDIO:NOT_FOUND', 'Recurso não encontrado no SaaS de estúdios', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/not-found-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/not-found-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-hides-details-on-retry-exhausted" description="Retry esgotado vira 503 sem detalhes internos">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('MULE:RETRY_EXHAUSTED', 'Connection refused: studio-saas', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/retry-exhausted-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/retry-exhausted-expected.json"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="api-errors-falls-back-to-500" description="Tipo de erro fora do catálogo vira 500 genérico">
+        <munit:execution>
+            <ee:transform doc:name="Transformação sob teste">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+import fromError from modules::ApiErrors
+output application/json
+---
+fromError('JAVA:NULL_POINTER', 'stack interno', 'corr-test-0001')]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/api-errors/unexpected-expected.json', 'application/json'))]" message="Saída difere do esperado em fixtures/api-errors/unexpected-expected.json"/>
+        </munit:validation>
+    </munit:test>
+</mule>

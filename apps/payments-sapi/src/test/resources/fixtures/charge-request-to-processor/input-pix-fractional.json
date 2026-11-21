@@ -1,0 +1,7 @@
+{
+  "reference": "rsv-7b7b",
+  "amount": { "value": 129.9, "currency": "BRL" },
+  "customer": { "id": "stu-002", "name": "Bruno Exemplo", "email": "bruno@example.com" },
+  "paymentMethod": { "type": "PIX" },
+  "description": "Pilates Solo"
+}

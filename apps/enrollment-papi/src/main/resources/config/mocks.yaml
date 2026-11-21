@@ -1,0 +1,19 @@
+# Mocks: System APIs simuladas pelo Prism do docker-compose (make up), sem runtime das System APIs.
+http:
+  listener:
+    port: "8082"
+api:
+  id: "0"
+sapi:
+  basePath: "/"
+  protocol: "HTTP"
+  clientId: "enrollment-papi-local"
+  studio:
+    host: "localhost"
+    port: "4011"
+  payments:
+    host: "localhost"
+    port: "4013"
+  finerp:
+    host: "localhost"
+    port: "4012"

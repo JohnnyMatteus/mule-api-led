@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes da política de retry da Process API ao chamar as System APIs (mock do requester HTTP). -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="system-api-clients-test-suite.xml"/>
+
+    <munit:test name="call-studio-sapi-does-not-retry-503" description="503 da System API já é retry esgotado lá: não repete, vira STUDIO:UNAVAILABLE">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Studio System API responde 503">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Studio System API"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ code: 'UPSTREAM_UNAVAILABLE', message: 'x', correlationId: 'c' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 503 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="GET aluno">
+                <munit:attributes value="#[{}]"/>
+                <munit:variables>
+                    <munit:variable key="sapiRequest" value="#[{ method: 'GET', path: '/students/stu-001' }]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="call-studio-sapi" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="STUDIO:UNAVAILABLE" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('UNAVAILABLE')]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Studio System API"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="call-studio-sapi-retries-when-unreachable" description="System API sem resposta (conexão) é repetida retry.maxRetries vezes">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Studio System API inalcançável">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Studio System API"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="HTTP:CONNECTIVITY"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="GET aluno">
+                <munit:attributes value="#[{}]"/>
+                <munit:variables>
+                    <munit:variable key="sapiRequest" value="#[{ method: 'GET', path: '/students/stu-001' }]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="call-studio-sapi" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="MULE:RETRY_EXHAUSTED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <!-- 1 tentativa original + 2 retries (retry.maxRetries em config/common.yaml). -->
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('RETRY_EXHAUSTED')]"/>
+            <munit-tools:verify-call processor="http:request" times="3">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Studio System API"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="call-payments-sapi-returns-4xx-to-caller" description="4xx não é retentado nem convertido aqui: quem chamou interpreta">
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Payments System API responde 422">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Payments System API"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ code: 'REJECTED_BY_PROCESSOR', message: 'x', correlationId: 'c' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 422 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST cobrança">
+                <munit:attributes value="#[{}]"/>
+                <munit:variables>
+                    <munit:variable key="sapiRequest" value="#[{ method: 'POST', path: '/charges', idempotencyKey: 'idem-test-0001:charge' }]"/>
+                </munit:variables>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="call-payments-sapi" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[attributes.statusCode]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:verify-call processor="http:request" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Payments System API"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+</mule>

@@ -1,0 +1,63 @@
+# Contratos entre camadas verificados no CI sem runtime Mule.
+# Cada fixture usada nos testes MUnit (entrada ou saída esperada de um DataWeave) é validada
+# contra o schema OAS da API que a produz ou consome. Se uma camada mudar o contrato, o teste
+# do consumidor quebra aqui, antes do deploy.
+#
+# fixture: caminho relativo a apps/<app>/src/test/resources/fixtures/
+# spec:    aplicação dona do contrato (apps/<spec>/src/main/resources/api/<spec>.yaml)
+# schema:  nome em components.schemas
+# pointer: (opcional) JSON Pointer dentro da fixture
+
+studio-sapi:
+  - { fixture: studio-member-to-student/expected.json, spec: studio-sapi, schema: Student }
+  - { fixture: studio-session-to-class/expected.json, spec: studio-sapi, schema: StudioClass }
+  - { fixture: reservation-request-to-booking/input.json, spec: studio-sapi, schema: ReservationRequest }
+  - { fixture: booking-to-reservation/expected-held.json, spec: studio-sapi, schema: Reservation }
+  - { fixture: booking-to-reservation/expected-confirmed.json, spec: studio-sapi, schema: Reservation }
+  - { fixture: api-errors/not-found-expected.json, pointer: /body, spec: studio-sapi, schema: Error }
+  - { fixture: api-errors/retry-exhausted-expected.json, pointer: /body, spec: studio-sapi, schema: Error }
+
+payments-sapi:
+  - { fixture: charge-request-to-processor/input.json, spec: payments-sapi, schema: ChargeRequest }
+  - { fixture: charge-request-to-processor/input-pix-fractional.json, spec: payments-sapi, schema: ChargeRequest }
+  - { fixture: processor-to-charge/expected-approved.json, spec: payments-sapi, schema: Charge }
+  - { fixture: processor-to-charge/expected-declined.json, spec: payments-sapi, schema: Charge }
+  - { fixture: api-errors/rejected-expected.json, pointer: /body, spec: payments-sapi, schema: Error }
+
+finerp-sapi:
+  - { fixture: receivable-to-finerp/input.json, spec: finerp-sapi, schema: ReceivableRequest }
+  - { fixture: finerp-to-receivable/expected-created.json, spec: finerp-sapi, schema: Receivable }
+  - { fixture: api-errors/rejected-expected.json, pointer: /body, spec: finerp-sapi, schema: Error }
+
+# A Process API consome as System APIs: as respostas simuladas nos testes dela precisam
+# ter o formato que as System APIs realmente devolvem, e os pedidos que ela monta precisam
+# ser aceitos por elas.
+enrollment-papi:
+  - { fixture: context/request.json, spec: enrollment-papi, schema: EnrollmentRequest }
+  - { fixture: context/student.json, spec: studio-sapi, schema: Student }
+  - { fixture: context/student-inactive.json, spec: studio-sapi, schema: Student }
+  - { fixture: context/class.json, spec: studio-sapi, schema: StudioClass }
+  - { fixture: context/class-full.json, spec: studio-sapi, schema: StudioClass }
+  - { fixture: context/class-long-title.json, spec: studio-sapi, schema: StudioClass }
+  - { fixture: context/reservation-held.json, spec: studio-sapi, schema: Reservation }
+  - { fixture: context/reservation-confirmed.json, spec: studio-sapi, schema: Reservation }
+  - { fixture: context/charge-approved.json, spec: payments-sapi, schema: Charge }
+  - { fixture: context/charge-declined.json, spec: payments-sapi, schema: Charge }
+  - { fixture: context/receivable.json, spec: finerp-sapi, schema: Receivable }
+  - { fixture: build-reservation-request/expected.json, spec: studio-sapi, schema: ReservationRequest }
+  - { fixture: build-charge-request/expected.json, spec: payments-sapi, schema: ChargeRequest }
+  - { fixture: build-receivable-request/expected.json, spec: finerp-sapi, schema: ReceivableRequest }
+  - { fixture: enrollment-response/expected-synced.json, spec: enrollment-papi, schema: Enrollment }
+  - { fixture: enrollment-response/expected-pending.json, spec: enrollment-papi, schema: Enrollment }
+  - { fixture: api-errors/payment-declined-expected.json, pointer: /body, spec: enrollment-papi, schema: Error }
+
+# A Experience API consome a Process API.
+student-app-xapi:
+  - { fixture: app-request-to-enrollment/input.json, spec: student-app-xapi, schema: AppEnrollmentRequest }
+  - { fixture: app-request-to-enrollment/expected.json, spec: enrollment-papi, schema: EnrollmentRequest }
+  - { fixture: enrollment-to-app-response/input-synced.json, spec: enrollment-papi, schema: Enrollment }
+  - { fixture: enrollment-to-app-response/input-pending.json, spec: enrollment-papi, schema: Enrollment }
+  - { fixture: enrollment-to-app-response/expected-synced.json, spec: student-app-xapi, schema: AppEnrollment }
+  - { fixture: process-error-to-app-error/input-class-full.json, spec: enrollment-papi, schema: Error }
+  - { fixture: process-error-to-app-error/expected-class-full.json, spec: student-app-xapi, schema: Error }
+  - { fixture: api-errors/process-unavailable-expected.json, pointer: /body, spec: student-app-xapi, schema: Error }

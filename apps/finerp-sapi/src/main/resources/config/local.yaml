@@ -1,0 +1,12 @@
+# Local: FinERP simulado pelo WireMock do docker-compose.
+http:
+  listener:
+    port: "8084"
+api:
+  id: "0"
+finerp:
+  protocol: "HTTP"
+  host: "localhost"
+  port: "9090"
+  basePath: "/finerp"
+  username: "integracao-local"

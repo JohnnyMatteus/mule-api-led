@@ -1,0 +1,8 @@
+{
+  "payment_id": "pay-8d2e",
+  "status": "declined",
+  "decline_code": "insufficient_funds",
+  "amount_minor": 15000,
+  "currency": "BRL",
+  "merchant_reference": "rsv-9f2a"
+}

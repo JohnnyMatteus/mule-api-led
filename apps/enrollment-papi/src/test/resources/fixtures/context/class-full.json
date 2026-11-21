@@ -1,0 +1,9 @@
+{
+  "id": "cls-102",
+  "title": "Pilates Solo",
+  "modality": "PILATES",
+  "startsAt": "2026-12-01T18:30:00-03:00",
+  "capacity": 8,
+  "availableSeats": 0,
+  "price": { "value": 129.9, "currency": "BRL" }
+}

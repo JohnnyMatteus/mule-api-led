@@ -1,0 +1,8 @@
+{
+  "status": 502,
+  "body": {
+    "code": "UPSTREAM_AUTH_FAILED",
+    "message": "Falha de integração com o ERP",
+    "correlationId": "corr-test-0001"
+  }
+}

@@ -1,0 +1,296 @@
+# Spec propositalmente inválida: prova que cada regra apiled-* do .spectral.yaml dispara.
+openapi: 3.0.3
+info:
+  title: Studio System API
+  version: 1.0.0
+  description: |
+    System API do SaaS de estúdios (fictício). Expõe alunos, aulas e reservas de vaga
+    num modelo canônico, escondendo o formato nativo do SaaS. Não contém regra de negócio
+    de matrícula: só traduz e protege o sistema de origem.
+  contact:
+    name: Time de Integração (fictício)
+    email: integracao@example.com
+  x-api-layer: banana
+  x-owner-team: integracao-estudios
+servers:
+  - url: http://localhost:8083/api
+    description: Local
+tags:
+  - name: students
+    description: Alunos do estúdio
+  - name: classes
+    description: Aulas com vagas
+  - name: reservations
+    description: Reservas temporárias de vaga
+paths:
+  /Students/{studentId}:
+    get:
+      tags: [students]
+      operationId: getStudent
+      summary: Busca um aluno pelo identificador
+      description: Retorna o aluno no modelo canônico.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: Aluno encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /classes/{classId}:
+    get:
+      tags: [classes]
+      operationId: get_class
+      summary: Busca uma aula pelo identificador
+      description: Retorna a aula com preço e vagas disponíveis.
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200":
+          description: Aula encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudioClass"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /reservations:
+    post:
+      tags: [reservations]
+      operationId: createReservation
+      summary: Reserva temporariamente uma vaga na aula
+      description: A reserva expira se não for confirmada. Repetir com a mesma Idempotency-Key devolve a mesma reserva.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationRequest"
+      responses:
+        "201":
+          description: Vaga reservada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /reservations/{reservationId}:
+    delete:
+      tags: [reservations]
+      operationId: cancelReservation
+      summary: Libera uma reserva
+      description: Usado como compensação quando o pagamento falha. Idempotente.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "204":
+          description: Reserva liberada (ou já liberada)
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /reservations/{reservationId}/confirmation:
+    post:
+      tags: [reservations]
+      operationId: confirmReservation
+      summary: Confirma a reserva como matrícula
+      description: Confirmar uma reserva já confirmada devolve o mesmo resultado.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "200":
+          description: Reserva confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Identificador de correlação propagado entre as camadas.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave que torna a criação segura para retry.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^stu-[a-z0-9]+$"
+    ClassId:
+      name: classId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^cls-[a-z0-9]+$"
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^rsv-[a-z0-9]+$"
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Estado do recurso não permite a operação
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: Sistema de origem indisponível após as tentativas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Money:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+          example: 150.00
+        currency:
+          type: string
+          enum: [BRL]
+    Student:
+      type: object
+      required: [id, name, email, document, status]
+      properties:
+        id:
+          type: string
+          example: stu-001
+        name:
+          type: string
+          example: Ana Exemplo
+        email:
+          type: string
+          format: email
+          example: ana@example.com
+        document:
+          type: string
+          description: Documento fiscal só com dígitos.
+          pattern: "^[0-9]{11}$"
+          example: "00011122233"
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+    StudioClass:
+      type: object
+      required: [id, title, modality, startsAt, capacity, availableSeats, price]
+      properties:
+        id:
+          type: string
+          example: cls-101
+        title:
+          type: string
+          example: Vinyasa Iniciante
+        modality:
+          type: string
+          enum: [YOGA, PILATES]
+        startsAt:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+        available_seats:
+          type: integer
+          minimum: 0
+        price:
+          $ref: "#/components/schemas/Money"
+    ReservationRequest:
+      type: object
+      required: [studentId, classId]
+      additionalProperties: false
+      properties:
+        studentId:
+          type: string
+          pattern: "^stu-[a-z0-9]+$"
+        classId:
+          type: string
+          pattern: "^cls-[a-z0-9]+$"
+    Reservation:
+      type: object
+      required: [id, studentId, classId, status]
+      properties:
+        id:
+          type: string
+          example: rsv-9f2a
+        studentId:
+          type: string
+        classId:
+          type: string
+        status:
+          type: string
+          enum: [HELD, CONFIRMED, CANCELLED]
+        expiresAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+        correlationId:
+          type: string
+        details:
+          type: array
+          items:
+            type: string

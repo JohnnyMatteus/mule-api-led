@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Acesso ao SaaS de estúdios. Um único ponto de saída com retry:
+    - 2xx e 4xx não lançam erro no requester, então until-successful só repete falhas
+      transitórias (5xx, timeout, conexão). Repetir um 4xx não muda o resultado.
+    - Depois do loop, 4xx viram erros STUDIO:* que o handler global traduz.
+    Escritas só são repetidas porque levam Idempotency-Key.
+-->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <sub-flow name="call-studio-backend">
+        <until-successful maxRetries="${retry.maxRetries}" millisBetweenRetries="${retry.intervalMs}" doc:name="Retry em falha transitória">
+            <http:request config-ref="studio-backend-config" method="#[vars.backendRequest.method]" path="#[vars.backendRequest.path]" responseTimeout="${studio.timeoutMs}" doc:name="SaaS de estúdios">
+                <http:headers>#[if (vars.idempotencyKey != null) { 'Idempotency-Key': vars.idempotencyKey } else {}]</http:headers>
+                <http:response-validator>
+                    <http:success-status-code-validator values="200..299,400..499"/>
+                </http:response-validator>
+            </http:request>
+        </until-successful>
+        <choice doc:name="Traduz 4xx do estúdio">
+            <when expression="#[attributes.statusCode == 404]">
+                <raise-error type="STUDIO:NOT_FOUND" description="Recurso não encontrado no SaaS de estúdios"/>
+            </when>
+            <when expression="#[attributes.statusCode == 409]">
+                <raise-error type="STUDIO:CONFLICT" description="Estado do recurso no SaaS de estúdios não permite a operação"/>
+            </when>
+            <when expression="#[attributes.statusCode >= 400]">
+                <raise-error type="STUDIO:REJECTED" description="SaaS de estúdios rejeitou a requisição"/>
+            </when>
+        </choice>
+    </sub-flow>
+</mule>

@@ -1,0 +1,10 @@
+http:
+  listener:
+    port: "8081"
+api:
+  id: "20000101"
+studio:
+  protocol: "HTTPS"
+  host: "studio-saas.example.com"
+  port: "443"
+  basePath: "/"

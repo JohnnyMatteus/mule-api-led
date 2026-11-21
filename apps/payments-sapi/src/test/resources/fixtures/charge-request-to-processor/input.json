@@ -1,0 +1,7 @@
+{
+  "reference": "rsv-9f2a",
+  "amount": { "value": 150, "currency": "BRL" },
+  "customer": { "id": "stu-001", "name": "Ana Exemplo", "email": "ana@example.com" },
+  "paymentMethod": { "type": "CARD_TOKEN", "token": "tok-test-0001" },
+  "description": "Matrícula Vinyasa Iniciante Manhã"
+}

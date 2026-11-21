@@ -1,0 +1,115 @@
+# Ambiente local sem runtime Mule.
+#
+# profile core:
+#   - backends: WireMock simulando os sistemas de origem (SaaS de estúdios, processador e
+#     FinERP), com as mesmas fixtures dos testes MUnit. As System APIs rodando localmente
+#     (env=local) apontam para ele.
+#   - mocks das APIs: Prism servindo as specs OAS das System APIs e da Process API, com
+#     validação de requisição (--errors: pedido fora do contrato recebe 4xx). O Prism serve
+#     as rotas sem o basePath /api. A Process API (env=mocks) roda contra os mocks das System APIs
+#     e a Experience API (env=mocks) contra o mock da Process API.
+# profile tools:
+#   - Swagger UI com as cinco specs.
+#
+# Uso: make up (core) | make up-tools | make test-integration
+
+name: mule-api-led
+
+x-prism: &prism
+  image: stoplight/prism:5.15.10
+  restart: unless-stopped
+  networks: [apiled]
+  healthcheck:
+    test: ["CMD-SHELL", "nc -z 127.0.0.1 4010"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+    start_period: 10s
+
+services:
+  backends:
+    image: wiremock/wiremock:3.13.2
+    profiles: [core]
+    command: ["--port", "8080", "--global-response-templating", "--disable-banner"]
+    ports:
+      - "${WIREMOCK_PORT:-9090}:8080"
+    volumes:
+      - ./mocks/wiremock/mappings:/home/wiremock/mappings:ro
+      # Corpos das respostas = fixtures de entrada dos testes MUnit (fonte única).
+      - ./apps/studio-sapi/src/test/resources/fixtures:/home/wiremock/__files/studio:ro
+      - ./apps/payments-sapi/src/test/resources/fixtures:/home/wiremock/__files/processor:ro
+      - ./apps/finerp-sapi/src/test/resources/fixtures:/home/wiremock/__files/finerp:ro
+    networks: [apiled]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  studio-sapi-mock:
+    <<: *prism
+    profiles: [core]
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "--multiprocess", "false", "--errors", "/specs/studio-sapi.yaml"]
+    ports:
+      - "${PRISM_STUDIO_PORT:-4011}:4010"
+    volumes:
+      - ./apps/studio-sapi/src/main/resources/api:/specs:ro
+
+  finerp-sapi-mock:
+    <<: *prism
+    profiles: [core]
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "--multiprocess", "false", "--errors", "/specs/finerp-sapi.yaml"]
+    ports:
+      - "${PRISM_FINERP_PORT:-4012}:4010"
+    volumes:
+      - ./apps/finerp-sapi/src/main/resources/api:/specs:ro
+
+  payments-sapi-mock:
+    <<: *prism
+    profiles: [core]
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "--multiprocess", "false", "--errors", "/specs/payments-sapi.yaml"]
+    ports:
+      - "${PRISM_PAYMENTS_PORT:-4013}:4010"
+    volumes:
+      - ./apps/payments-sapi/src/main/resources/api:/specs:ro
+
+  enrollment-papi-mock:
+    <<: *prism
+    profiles: [core]
+    command: ["mock", "-h", "0.0.0.0", "-p", "4010", "--multiprocess", "false", "--errors", "/specs/enrollment-papi.yaml"]
+    ports:
+      - "${PRISM_PROCESS_PORT:-4020}:4010"
+    volumes:
+      - ./apps/enrollment-papi/src/main/resources/api:/specs:ro
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:v5.32.15
+    profiles: [tools]
+    ports:
+      - "${SWAGGER_UI_PORT:-8090}:8080"
+    environment:
+      URLS: >-
+        [
+          {"name": "Experience: student-app-xapi", "url": "/specs/student-app-xapi.yaml"},
+          {"name": "Process: enrollment-papi", "url": "/specs/enrollment-papi.yaml"},
+          {"name": "System: studio-sapi", "url": "/specs/studio-sapi.yaml"},
+          {"name": "System: payments-sapi", "url": "/specs/payments-sapi.yaml"},
+          {"name": "System: finerp-sapi", "url": "/specs/finerp-sapi.yaml"}
+        ]
+    volumes:
+      - ./apps/student-app-xapi/src/main/resources/api/student-app-xapi.yaml:/usr/share/nginx/html/specs/student-app-xapi.yaml:ro
+      - ./apps/enrollment-papi/src/main/resources/api/enrollment-papi.yaml:/usr/share/nginx/html/specs/enrollment-papi.yaml:ro
+      - ./apps/studio-sapi/src/main/resources/api/studio-sapi.yaml:/usr/share/nginx/html/specs/studio-sapi.yaml:ro
+      - ./apps/payments-sapi/src/main/resources/api/payments-sapi.yaml:/usr/share/nginx/html/specs/payments-sapi.yaml:ro
+      - ./apps/finerp-sapi/src/main/resources/api/finerp-sapi.yaml:/usr/share/nginx/html/specs/finerp-sapi.yaml:ro
+    networks: [apiled]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+networks:
+  apiled:
+    name: mule-api-led-net

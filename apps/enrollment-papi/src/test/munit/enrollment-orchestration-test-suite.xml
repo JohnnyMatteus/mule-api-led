@@ -1,0 +1,796 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Testes da orquestração da matrícula. As chamadas às System APIs (flow-refs) são simuladas por etapa. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="enrollment-orchestration-test-suite.xml"/>
+
+    <munit:test name="enroll-happy-path-returns-201-with-erp-synced" description="Reserva, cobra, confirma e registra no ERP">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-response/expected-synced.json', 'application/json'))]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+            <munit-tools:verify-call processor="flow-ref" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-payment-declined-releases-seat" description="Recusa do pagamento dispara a compensação (libera a vaga) e devolve 422">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-declined.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('PAYMENT_DECLINED')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-declined-and-release-fails-still-returns-422" description="Se a compensação falhar, a resposta continua sendo a recusa (hold expira sozinho)">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-declined.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="STUDIO:UNAVAILABLE"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('PAYMENT_DECLINED')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-erp-unavailable-confirms-with-pending" description="ERP fora do ar não desfaz a matrícula: 201 com erpSync PENDING">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="FINERP:UNAVAILABLE"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that expression="#[payload]" is="#[MunitTools::equalTo(readUrl('classpath://fixtures/enrollment-response/expected-pending.json', 'application/json'))]"/>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-inactive-student-makes-no-writes" description="Aluno inativo: 422 antes de reservar ou cobrar">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student-inactive.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(422)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('STUDENT_INACTIVE')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-student-not-found-returns-404" description="Aluno inexistente na Studio System API vira 404 STUDENT_NOT_FOUND">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ code: 'NOT_FOUND', message: 'x', correlationId: 'c' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 404 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(404)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('STUDENT_NOT_FOUND')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-class-full-on-reservation-returns-409" description="Aula lota entre a leitura e a reserva (409): CLASS_FULL sem cobrar">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ code: 'CONFLICT', message: 'x', correlationId: 'c' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 409 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(409)]"/>
+            <munit-tools:assert-that expression="#[payload.code]" is="#[MunitTools::equalTo('CLASS_FULL')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-payments-unavailable-keeps-seat-and-returns-503" description="Resultado da cobrança desconhecido: não libera a vaga e devolve 503">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="PAYMENTS:UNAVAILABLE"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-confirmed.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="PAYMENTS:UNAVAILABLE" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(503)]"/>
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('UNAVAILABLE')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <munit:test name="enroll-reservation-expired-after-charge-returns-409" description="Cobrou mas a reserva expirou: 409 propagado e log de estorno pendente">
+        <munit:behavior>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aluno (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aluno (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/student.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula GET aula (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="GET aula (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/class.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 200 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/reservation-held.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST cobrança (Payments)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST cobrança (Payments)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/charge-approved.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST confirmação (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST confirmação (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[{ code: 'CONFLICT', message: 'x', correlationId: 'c' }]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 409 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula DELETE reserva (Studio)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="DELETE reserva (Studio)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 204 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when processor="flow-ref" doc:name="Simula POST título (FinERP)">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[readUrl('classpath://fixtures/context/receivable.json', 'application/json')]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{ statusCode: 201 }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit:set-event doc:name="POST /enrollments">
+                <munit:payload value="#[readUrl('classpath://fixtures/context/request.json', 'application/json')]" mediaType="application/json"/>
+                <munit:attributes value="#[{ headers: { 'idempotency-key': 'idem-test-0001' } }]"/>
+            </munit:set-event>
+        </munit:behavior>
+        <munit:execution>
+            <try doc:name="Captura o erro propagado">
+                <flow-ref name="post:\enrollments:application\json:enrollment-papi-config" doc:name="Flow sob teste"/>
+                <error-handler>
+                    <on-error-continue type="ENROLLMENT:RESERVATION_EXPIRED" logException="false">
+                        <set-variable variableName="propagatedError" value="#[error.errorType.identifier]"/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that expression="#[vars.httpStatus]" is="#[MunitTools::equalTo(409)]"/>
+            <munit-tools:assert-that expression="#[vars.propagatedError]" is="#[MunitTools::equalTo('RESERVATION_EXPIRED')]"/>
+            <munit-tools:verify-call processor="flow-ref" times="0">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="POST título (FinERP)"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+</mule>

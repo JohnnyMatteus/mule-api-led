@@ -1,0 +1,6 @@
+{
+  "code": "CLASS_FULL",
+  "message": "Aula sem vagas",
+  "correlationId": "corr-test-0001",
+  "details": ["Aula lotou durante a reserva"]
+}

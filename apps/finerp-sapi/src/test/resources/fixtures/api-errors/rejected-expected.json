@@ -1,0 +1,9 @@
+{
+  "status": 422,
+  "body": {
+    "code": "REJECTED_BY_ERP",
+    "message": "O ERP rejeitou o título",
+    "correlationId": "corr-test-0001",
+    "details": ["FinERP rejeitou o título por regra de negócio"]
+  }
+}

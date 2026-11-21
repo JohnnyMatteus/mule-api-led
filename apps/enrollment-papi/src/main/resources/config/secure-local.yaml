@@ -1,0 +1,4 @@
+# Cifrado com a chave pública de desenvolvimento (veja docs/design-doc.md, seção Segurança).
+# Valor em claro: dev-only-sapi-client-secret. Nunca use esta chave fora da máquina local.
+sapi:
+  clientSecret: "![OXfBGfMW7UYQNX3IgHIxSNgzU4qAjtK+EO+ug/nIlu4=]"

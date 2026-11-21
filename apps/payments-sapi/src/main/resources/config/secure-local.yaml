@@ -1,0 +1,4 @@
+# Cifrado com a chave pública de desenvolvimento (veja docs/design-doc.md, seção Segurança).
+# Valor em claro: dev-only-payments-api-key. Nunca use esta chave fora da máquina local.
+processor:
+  apiKey: "![1cwFVhXVWFoSA3G3hUdG1LxlXxeFL215HuxRdyjhSw4=]"

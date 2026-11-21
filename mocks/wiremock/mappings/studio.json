@@ -1,0 +1,170 @@
+{
+  "mappings": [
+    {
+      "name": "estúdio: membro ativo",
+      "request": {
+        "method": "GET",
+        "urlPath": "/studio/v1/members/stu-001",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/studio-member-to-student/input.json"
+      }
+    },
+    {
+      "name": "estúdio: membro inativo",
+      "request": {
+        "method": "GET",
+        "urlPath": "/studio/v1/members/stu-002",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/studio-member-to-student/input-inactive.json"
+      }
+    },
+    {
+      "name": "estúdio: membro inexistente",
+      "priority": 10,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/studio/v1/members/.+"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "message": "member not found"
+        }
+      }
+    },
+    {
+      "name": "estúdio: sessão com vagas",
+      "request": {
+        "method": "GET",
+        "urlPath": "/studio/v1/sessions/cls-101",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/studio-session-to-class/input.json"
+      }
+    },
+    {
+      "name": "estúdio: sessão lotada",
+      "request": {
+        "method": "GET",
+        "urlPath": "/studio/v1/sessions/cls-102",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/studio-session-to-class/input-overbooked.json"
+      }
+    },
+    {
+      "name": "estúdio: sessão inexistente",
+      "priority": 10,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/studio/v1/sessions/.+"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "message": "session not found"
+        }
+      }
+    },
+    {
+      "name": "estúdio: reserva temporária",
+      "request": {
+        "method": "POST",
+        "urlPath": "/studio/v1/bookings",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          },
+          "Idempotency-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/booking-to-reservation/input-held.json"
+      }
+    },
+    {
+      "name": "estúdio: confirmação",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/studio/v1/bookings/[^/]+/confirm",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyFileName": "studio/booking-to-reservation/input-confirmed.json"
+      }
+    },
+    {
+      "name": "estúdio: cancelamento",
+      "request": {
+        "method": "DELETE",
+        "urlPathPattern": "/studio/v1/bookings/[^/]+",
+        "headers": {
+          "X-Api-Key": {
+            "matches": ".+"
+          }
+        }
+      },
+      "response": {
+        "status": 204
+      }
+    }
+  ]
+}

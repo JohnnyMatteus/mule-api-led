@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Configurações globais: propriedades por ambiente, conexões, APIkit e governança. -->
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+        http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd">
+
+    <global-property name="env" value="local" doc:name="Ambiente padrão (sobrescrito por -Denv)"/>
+
+    <configuration-properties file="config/common.yaml" doc:name="Propriedades comuns"/>
+    <configuration-properties file="config/${env}.yaml" doc:name="Propriedades do ambiente"/>
+    <secure-properties:config name="secure-properties" file="config/secure-${env}.yaml" key="${secure.key}" doc:name="Propriedades seguras do ambiente">
+        <secure-properties:encrypt algorithm="AES" mode="CBC"/>
+    </secure-properties:config>
+
+    <configuration defaultErrorHandler-ref="global-error-handler" doc:name="Handler de erro global"/>
+
+    <http:listener-config name="studio-sapi-listener-config" doc:name="Listener HTTP">
+        <http:listener-connection host="${http.listener.host}" port="${http.listener.port}"/>
+    </http:listener-config>
+
+    <apikit:config name="studio-sapi-config" api="studio-sapi.yaml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" doc:name="APIkit (contrato OAS)"/>
+
+    <http:request-config name="studio-backend-config" basePath="${studio.basePath}" sendCorrelationId="ALWAYS" doc:name="SaaS de estúdios">
+        <http:request-connection protocol="${studio.protocol}" host="${studio.host}" port="${studio.port}"/>
+        <http:default-headers>
+            <http:default-header key="X-Api-Key" value="${secure::studio.apiKey}"/>
+        </http:default-headers>
+    </http:request-config>
+
+    <api-gateway:autodiscovery apiId="${api.id}" ignoreBasePath="true" flowRef="studio-sapi-main" doc:name="API Manager (políticas e client id)"/>
+</mule>

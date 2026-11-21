@@ -1,0 +1,7 @@
+{
+  "booking_id": "rsv-9f2a",
+  "member_id": "stu-001",
+  "session_id": "cls-101",
+  "state": "held",
+  "hold_expires_at": "2026-12-01T06:45:00-03:00"
+}

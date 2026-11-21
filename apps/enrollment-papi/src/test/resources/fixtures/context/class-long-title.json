@@ -1,0 +1,12 @@
+{
+  "id": "cls-103",
+  "title": "Aula de Yoga Restaurativa com Meditação Guiada, Respiração Consciente e Alongamento Profundo para Iniciantes",
+  "modality": "YOGA",
+  "startsAt": "2026-12-02T08:00:00-03:00",
+  "capacity": 10,
+  "availableSeats": 3,
+  "price": {
+    "value": 10,
+    "currency": "BRL"
+  }
+}

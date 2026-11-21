@@ -1,0 +1,4 @@
+# Cifrado com a chave pública de desenvolvimento (veja docs/design-doc.md, seção Segurança).
+# Valor em claro: dev-only-papi-client-secret. Nunca use esta chave fora da máquina local.
+papi:
+  clientSecret: "![kotnQjHGzrE86W+0009rgPx4jIcGBi5jGIVFv2VPHso=]"

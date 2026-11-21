@@ -1,0 +1,8 @@
+{
+  "status": 503,
+  "body": {
+    "code": "UPSTREAM_UNAVAILABLE",
+    "message": "Estúdio indisponível; tente novamente",
+    "correlationId": "corr-test-0001"
+  }
+}

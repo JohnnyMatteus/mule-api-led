@@ -1,0 +1,114 @@
+# Governança das APIs como código.
+# Toda spec em apps/*/src/main/resources/api/ passa por estas regras no CI.
+# Regras com prefixo "apiled-" são as convenções da casa; o restante vem do
+# conjunto recomendado do Spectral para OAS.
+extends:
+  - [spectral:oas, recommended]
+
+rules:
+  apiled-layer-declared:
+    description: A spec declara a camada API-Led em info.x-api-layer.
+    message: "info.x-api-layer deve ser experience, process ou system."
+    severity: error
+    given: $.info
+    then:
+      field: x-api-layer
+      function: enumeration
+      functionOptions:
+        values: [experience, process, system]
+
+  apiled-owner-declared:
+    description: Toda API tem um time dono, para governança e suporte.
+    severity: error
+    given: $.info
+    then:
+      field: x-owner-team
+      function: truthy
+
+  apiled-correlation-header:
+    description: Toda operação aceita o header X-Correlation-ID.
+    message: "A operação precisa declarar o parâmetro X-Correlation-ID."
+    severity: error
+    given: $.paths[*][get,put,post,delete,patch]
+    then:
+      - field: parameters
+        function: truthy
+      - field: parameters
+        function: schema
+        functionOptions:
+          schema:
+            type: array
+            contains:
+              type: object
+              required: [name, in]
+              properties:
+                name: { const: X-Correlation-ID }
+                in: { const: header }
+
+  apiled-post-idempotency-key:
+    description: POST cria recurso e pode ser retentado; exige Idempotency-Key obrigatório.
+    message: "POST precisa declarar o header Idempotency-Key como obrigatório."
+    severity: error
+    given: $.paths[*].post
+    then:
+      field: parameters
+      function: schema
+      functionOptions:
+        schema:
+          type: array
+          contains:
+            type: object
+            required: [name, in, required]
+            properties:
+              name: { const: Idempotency-Key }
+              in: { const: header }
+              required: { const: true }
+
+  apiled-error-contract:
+    description: Respostas 4xx e 5xx usam o contrato de erro comum (code, message, correlationId).
+    message: "Resposta de erro sem o contrato comum: {{error}}"
+    severity: error
+    given: "$.paths[*][*].responses[?(@property.match(/^[45]/))]"
+    then:
+      field: "content.application/json.schema"
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [required, properties]
+          properties:
+            required:
+              type: array
+              allOf:
+                - contains: { const: code }
+                - contains: { const: message }
+                - contains: { const: correlationId }
+
+  apiled-operation-id-camel-case:
+    description: operationId em camelCase, usado como nome de flow pelo APIkit.
+    severity: error
+    given: $.paths[*][get,put,post,delete,patch].operationId
+    then:
+      function: casing
+      functionOptions:
+        type: camel
+
+  apiled-paths-kebab-case:
+    description: Segmentos de path em kebab-case (parâmetros entre chaves são permitidos).
+    severity: error
+    given: $.paths
+    then:
+      field: "@key"
+      function: pattern
+      functionOptions:
+        match: "^(/([a-z0-9]+(-[a-z0-9]+)*|\\{[a-zA-Z]+\\}))+$"
+
+  apiled-schema-properties-camel-case:
+    description: Propriedades dos schemas públicos em camelCase.
+    severity: error
+    given: $.components.schemas[*].properties
+    then:
+      field: "@key"
+      function: casing
+      functionOptions:
+        type: camel

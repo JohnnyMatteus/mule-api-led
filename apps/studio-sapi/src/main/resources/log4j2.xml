@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logs estruturados em JSON, uma linha por evento. "properties" inclui o contexto (MDC)
+    que o runtime preenche, onde está o correlationId do evento.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <JsonLayout compact="true" eventEol="true" properties="true" stacktraceAsString="true">
+                <KeyValuePair key="app" value="studio-sapi"/>
+                <KeyValuePair key="layer" value="system"/>
+            </JsonLayout>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <AsyncLogger name="org.mule.runtime.core.internal.processor.LoggerMessageProcessor" level="INFO"/>
+        <AsyncLogger name="org.mule.service.http" level="WARN"/>
+        <AsyncLogger name="org.mule.extension.http" level="WARN"/>
+        <AsyncRoot level="WARN">
+            <AppenderRef ref="Console"/>
+        </AsyncRoot>
+    </Loggers>
+</Configuration>
