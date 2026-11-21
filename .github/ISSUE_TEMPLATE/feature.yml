@@ -1,0 +1,28 @@
+name: Funcionalidade
+description: Nova operação, novo canal ou nova integração.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Necessidade de negócio
+      description: Quem precisa, o que precisa e por quê.
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Camada provável
+      description: Canal novo costuma ser Experience; regra de negócio, Process; sistema novo, System.
+      options:
+        - Experience
+        - Process
+        - System
+        - Não sei
+    validations:
+      required: true
+  - type: textarea
+    id: reuse
+    attributes:
+      label: O que já existe e pode ser reaproveitado
+      description: APIs atuais que atendem parte da necessidade.

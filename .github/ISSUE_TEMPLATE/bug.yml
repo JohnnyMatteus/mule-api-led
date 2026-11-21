@@ -1,0 +1,33 @@
+name: Bug
+description: Comportamento de uma API diferente do contrato ou do esperado.
+labels: [bug]
+body:
+  - type: dropdown
+    id: api
+    attributes:
+      label: API
+      options:
+        - student-app-xapi (experience)
+        - enrollment-papi (process)
+        - studio-sapi (system)
+        - payments-sapi (system)
+        - finerp-sapi (system)
+    validations:
+      required: true
+  - type: input
+    id: correlation
+    attributes:
+      label: X-Correlation-ID
+      description: Identificador devolvido no header da resposta. Permite achar a requisição nos logs de todas as camadas.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      description: Requisição (sem dados pessoais reais), resposta recebida e resposta esperada.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacto
+      description: Por exemplo, aluno cobrado sem matrícula, título não registrado no ERP.
