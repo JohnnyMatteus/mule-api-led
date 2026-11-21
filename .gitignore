@@ -1,0 +1,23 @@
+# Node (ferramentas de validação)
+node_modules/
+
+# Maven / Mule
+target/
+.mule/
+.tooling-project/
+*.jar
+.classpath
+.project
+.settings/
+.DS_Store
+
+# Segredos e configuração local
+.env
+.env.*
+!.env.example
+config.local.yaml
+*.key
+settings-local.xml
+
+# Ferramentas baixadas no CI
+.tools/
