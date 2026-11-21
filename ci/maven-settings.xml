@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Settings do Maven para rodar MUnit (job manual do CI e make munit).
+    O runtime Mule EE usado pelo MUnit fica no repositório EE da MuleSoft, que exige credencial
+    de cliente. Nada é versionado aqui: os valores vêm de variáveis de ambiente (secrets do CI).
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <servers>
+        <server>
+            <id>mulesoft-ee-releases</id>
+            <username>${env.MULESOFT_NEXUS_USERNAME}</username>
+            <password>${env.MULESOFT_NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+    <profiles>
+        <profile>
+            <id>mulesoft-ee</id>
+            <repositories>
+                <repository>
+                    <id>mulesoft-ee-releases</id>
+                    <name>MuleSoft EE Releases</name>
+                    <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url>
+                </repository>
+            </repositories>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>mulesoft-ee-releases</id>
+                    <name>MuleSoft EE Releases</name>
+                    <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
+    <activeProfiles>
+        <activeProfile>mulesoft-ee</activeProfile>
+    </activeProfiles>
+</settings>
