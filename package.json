@@ -1,0 +1,22 @@
+{
+  "name": "mule-api-led-tooling",
+  "private": true,
+  "description": "Validações locais e de CI: lint de specs OAS, XML bem-formado e testes de contrato e governança.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint:specs": "spectral lint \"apps/*/src/main/resources/api/*.yaml\" --fail-severity=warn",
+    "lint:xml": "sh tools/validate-xml.sh",
+    "test": "node --test \"tools/test/*.test.js\"",
+    "validate": "npm run lint:specs && npm run lint:xml && npm test"
+  },
+  "devDependencies": {
+    "@stoplight/spectral-cli": "6.16.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "fast-xml-parser": "5.12.1",
+    "yaml": "2.9.1"
+  }
+}
