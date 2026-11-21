@@ -10,7 +10,8 @@
     "lint:specs": "spectral lint \"apps/*/src/main/resources/api/*.yaml\" --fail-severity=warn",
     "lint:xml": "sh tools/validate-xml.sh",
     "test": "node --test \"tools/test/*.test.js\"",
-    "validate": "npm run lint:specs && npm run lint:xml && npm test"
+    "validate": "npm run lint:specs && npm run lint:xml && npm test",
+    "test:integration": "node --test \"tools/integration/*.test.js\""
   },
   "devDependencies": {
     "@stoplight/spectral-cli": "6.16.3",
